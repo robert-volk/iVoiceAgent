@@ -57,9 +57,9 @@ final class DictationController: ObservableObject {
     // MARK: - Permissions
 
     func requestPermissionsIfNeeded() async {
-        async let speechOK = requestSpeechAuthorization()
-        async let micOK = requestMicAuthorization()
-        let granted = await speechOK && (await micOK)
+        let speechOK = await requestSpeechAuthorization()
+        let micOK = await requestMicAuthorization()
+        let granted = speechOK && micOK
         permissionState = granted ? .granted : .denied
     }
 
