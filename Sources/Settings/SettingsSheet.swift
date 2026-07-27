@@ -6,7 +6,12 @@ import SwiftUI
 /// every answer is a Claude API call), the one-time Drive folder pick, and
 /// the optional ElevenLabs key + voice ID that upgrades the spoken voice.
 struct SettingsSheet: View {
-    let onPickFolder: () -> Void
+    /// Called with the picked folder URL. The `.fileImporter` that produces
+    /// it lives on *this* view, not the presenter — a `.fileImporter`
+    /// attached to the view behind an already-presented `.sheet` can't
+    /// present its own modal (a sheet can't present a sheet from underneath
+    /// itself), so the folder picker has to be owned here.
+    let onPickFolder: (URL) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var settings = AppSettings.shared
@@ -16,6 +21,7 @@ struct SettingsSheet: View {
     @State private var elevenLabsVoiceID: String = AppSettings.shared.elevenLabsVoiceID
     @State private var isValidatingElevenLabs = false
     @State private var elevenLabsValidationMessage: String?
+    @State private var showingFolderPicker = false
 
     var body: some View {
         NavigationStack {
@@ -31,7 +37,7 @@ struct SettingsSheet: View {
                 }
 
                 Section {
-                    Button(action: onPickFolder) {
+                    Button(action: { showingFolderPicker = true }) {
                         Label(folderStatusText, systemImage: "folder")
                     }
                 } header: {
@@ -68,6 +74,11 @@ struct SettingsSheet: View {
                         save()
                         dismiss()
                     }
+                }
+            }
+            .fileImporter(isPresented: $showingFolderPicker, allowedContentTypes: [.folder]) { result in
+                if case .success(let url) = result {
+                    onPickFolder(url)
                 }
             }
         }

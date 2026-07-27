@@ -12,7 +12,6 @@ struct AgentView: View {
 
     @State private var showingSettings = false
     @State private var showingImporter = false
-    @State private var showingFolderPicker = false
 
     /// `viewModel`'s child objects (`dictation`, `corpus`) are also observed
     /// directly here — a plain `let` reference on `viewModel` alone wouldn't
@@ -79,12 +78,7 @@ struct AgentView: View {
         .sheet(isPresented: $showingSettings, onDismiss: {
             settings.hasSeenFirstLaunch = true
         }) {
-            SettingsSheet(onPickFolder: { showingFolderPicker = true })
-        }
-        .fileImporter(isPresented: $showingFolderPicker, allowedContentTypes: [.folder]) { result in
-            if case .success(let url) = result {
-                corpus.saveFolderSelection(url)
-            }
+            SettingsSheet(onPickFolder: { url in corpus.saveFolderSelection(url) })
         }
         .fileImporter(
             isPresented: $showingImporter,
