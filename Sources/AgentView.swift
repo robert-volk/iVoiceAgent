@@ -47,6 +47,15 @@ struct AgentView: View {
                     .padding(.bottom, 8)
             }
 
+            if let corpusError = corpus.lastError {
+                Text(corpusError)
+                    .font(Theme.monoLabel)
+                    .foregroundStyle(Theme.webAccent)
+                    .lineLimit(3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.bottom, 8)
+            }
+
             SourceChipView(tracker: viewModel.sourceTracker)
                 .padding(.bottom, 8)
 

@@ -111,6 +111,7 @@ final class CorpusStore: ObservableObject {
         defer { isIndexing = false }
 
         folderLabel = settings.corpusBookmarkData != nil ? "Voice Agent (Drive)" : "Voice Agent (local)"
+        lastError = nil
 
         let files: [URL] = withFolderAccess { folder in
             (try? FileManager.default.contentsOfDirectory(
@@ -122,6 +123,7 @@ final class CorpusStore: ObservableObject {
 
         let supportedFiles = files.filter { TextExtractor.supportedExtensions.contains($0.pathExtension.lowercased()) }
         var seenFilenames = Set<String>()
+        var failures: [String] = []
 
         for fileURL in supportedFiles {
             let filename = fileURL.lastPathComponent
@@ -130,12 +132,18 @@ final class CorpusStore: ObservableObject {
             guard let signature = Self.signature(for: fileURL) else { continue }
             if fileSignatures[filename] == signature { continue }  // unchanged since last scan
 
-            let extracted: ExtractedDocument? = withFolderAccess { _ in try? TextExtractor.extract(from: fileURL) }
-            guard let document = extracted else { continue }
-
-            let chunks = Chunker.chunk(document)
-            index.replaceChunks(forFilename: filename, with: chunks)
-            fileSignatures[filename] = signature
+            do {
+                let document = try withFolderAccess { _ in try TextExtractor.extract(from: fileURL) }
+                let chunks = Chunker.chunk(document)
+                index.replaceChunks(forFilename: filename, with: chunks)
+                fileSignatures[filename] = signature
+            } catch {
+                // Most often a scanned/image-only PDF with no text layer, or
+                // an empty file. Recorded so it surfaces on screen instead
+                // of silently inflating "N docs indexed" with a file that
+                // contributed zero chunks to retrieval.
+                failures.append("\(filename) — \(error.localizedDescription)")
+            }
         }
 
         // Anything indexed previously but no longer present gets dropped.
@@ -145,7 +153,14 @@ final class CorpusStore: ObservableObject {
             fileSignatures.removeValue(forKey: filename)
         }
 
-        indexedDocumentCount = seenFilenames.count
+        // Ground truth: how many distinct files actually contributed at
+        // least one chunk to the index right now — not just how many
+        // supported-extension files happen to be sitting in the folder.
+        indexedDocumentCount = Set(index.chunks.map(\.filename)).count
+
+        if !failures.isEmpty {
+            lastError = "Couldn't read: " + failures.joined(separator: "; ")
+        }
     }
 
     private static func signature(for url: URL) -> String? {
