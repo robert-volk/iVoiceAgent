@@ -57,7 +57,9 @@ Google Drive, which both ends already understand:
 1. **On your PC**, install [Google Drive for desktop](https://www.google.com/drive/download/) if
    you don't have it, sign in, and create a folder named **`Voice Agent`** somewhere inside your
    Drive (e.g. `Google Drive/My Drive/Voice Agent`). Drop your documents in there — PDFs, `.txt`,
-   `.md`, `.csv`, `.rtf`, `.docx` are all read.
+   `.md`, `.csv`, `.rtf` are all read. (`.docx` isn't supported — iOS has no built-in OOXML reader,
+   and reading one by hand would mean unzipping the file and parsing its XML, which needs a real
+   archive library. Save Word docs as `.rtf` or `.txt` instead.)
 2. **On your iPhone**, make sure the **Google Drive app** is installed and signed in (this is what
    registers Drive as a location the Files app can browse — you don't need to open the Drive app
    itself day-to-day, just have it installed and signed in once).

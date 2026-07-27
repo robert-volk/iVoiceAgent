@@ -10,6 +10,9 @@ struct Excerpt {
 }
 
 /// Cosine-similarity retrieval over the on-device embedding index.
+/// `@MainActor` because `EmbeddingIndex` (which this reads) is — every call
+/// site (AgentViewModel) is already on the main actor.
+@MainActor
 enum Retriever {
     /// Below this, a chunk is treated as "not actually about the question."
     /// This is a heuristic, not a hard cutoff — phrasing varies enough that

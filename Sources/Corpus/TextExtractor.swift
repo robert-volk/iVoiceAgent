@@ -32,7 +32,15 @@ enum TextExtractorError: LocalizedError {
 /// Turns a document into plain text. Deliberately narrow: these are the
 /// formats a personal "drop it in a folder" corpus actually contains.
 enum TextExtractor {
-    static let supportedExtensions: Set<String> = ["pdf", "txt", "md", "csv", "rtf", "docx"]
+    // .docx is deliberately not supported: NSAttributedString.DocumentType
+    // has no OOXML case on iOS (that's a macOS-only reader — confirmed by a
+    // real build failure, not just a guess), and parsing a .docx by hand
+    // means unzipping it and reading word/document.xml, which needs either
+    // a real archive library (a third-party package, ruled out for this
+    // app) or a hand-rolled zip reader. Not worth it for v1 — a dropped
+    // .docx is simply skipped at indexing time (see CorpusStore.rescan()),
+    // not a crash.
+    static let supportedExtensions: Set<String> = ["pdf", "txt", "md", "csv", "rtf"]
 
     /// For the `+` button's `.fileImporter` — resolved defensively since not
     /// every one of these has a guaranteed built-in `UTType` constant (`.md`
@@ -41,7 +49,6 @@ enum TextExtractor {
     static let supportedContentTypes: [UTType] = {
         var types: [UTType] = [.pdf, .plainText, .rtf, .commaSeparatedText]
         if let markdown = UTType(filenameExtension: "md") { types.append(markdown) }
-        if let docx = UTType(filenameExtension: "docx") { types.append(docx) }
         return types
     }()
 
@@ -54,14 +61,6 @@ enum TextExtractor {
             return try extractPlainText(url, filename: filename)
         case "rtf":
             return try extractAttributed(url, filename: filename, documentType: .rtf)
-        case "docx":
-            // NSAttributedString's OOXML reader is solidly documented on
-            // macOS; iOS support for this exact path has been less
-            // consistently documented across OS versions. If a real .docx
-            // ever comes back unreadable here, extractAttributed's failure
-            // is caught by CorpusStore.rescan() (the file is just skipped,
-            // not a crash) — worth a look if docx indexing seems flaky.
-            return try extractAttributed(url, filename: filename, documentType: .officeOpenXML)
         default:
             throw TextExtractorError.unsupportedType(url.pathExtension)
         }
