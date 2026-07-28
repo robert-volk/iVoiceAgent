@@ -1,7 +1,10 @@
 """One-off generator for the legacy app-icon PNGs referenced by
-Info.plist's CFBundleIconFiles (see project.yml notes). Draws a simple
-terminal-prompt glyph — a phosphor-green ">" chevron with a trailing
-caret block on black — matching the app's "Terminal" visual direction.
+Info.plist's CFBundleIconFiles (see project.yml notes). Draws a bold,
+simplified microphone silhouette — phosphor green on near-black,
+same palette as the in-app "Terminal" direction, but reads as "voice"
+at a glance rather than "generic dev tool" the way the old ">_"
+chevron did. Kept to three solid shapes (capsule, stem, base) with no
+fine detail, since anything finer disappears at 40x40.
 
 Run once locally (`python scripts/gen_icon.py`) whenever the icon needs
 regenerating; the output PNGs are committed to Resources/AppIcons/.
@@ -29,28 +32,35 @@ def draw_master() -> Image.Image:
     img = Image.new("RGBA", (MASTER, MASTER), BG)
     d = ImageDraw.Draw(img)
 
-    # Chevron ">" — two thick diagonal strokes meeting at a point.
-    stroke = MASTER // 11
-    left_x = MASTER * 0.22
-    mid_x = MASTER * 0.46
-    right_x = left_x
-    top_y = MASTER * 0.30
-    mid_y = MASTER * 0.50
-    bot_y = MASTER * 0.70
+    cx = MASTER * 0.5
 
-    d.line([(left_x, top_y), (mid_x, mid_y)], fill=FG, width=stroke, joint="curve")
-    d.line([(mid_x, mid_y), (right_x, bot_y)], fill=FG, width=stroke, joint="curve")
-    # Round the stroke ends so it doesn't look clipped at small sizes.
-    for (x, y) in [(left_x, top_y), (mid_x, mid_y), (right_x, bot_y)]:
-        r = stroke / 2
-        d.ellipse([x - r, y - r, x + r, y + r], fill=FG)
+    # Mic head — a tall rounded capsule, the dominant shape.
+    head_w = MASTER * 0.26
+    head_h = MASTER * 0.42
+    head_x0 = cx - head_w / 2
+    head_x1 = cx + head_w / 2
+    head_y0 = MASTER * 0.16
+    head_y1 = head_y0 + head_h
+    d.rounded_rectangle([head_x0, head_y0, head_x1, head_y1], radius=head_w / 2, fill=FG)
 
-    # Trailing caret block.
-    caret_w = MASTER * 0.16
-    caret_h = stroke
-    caret_x0 = MASTER * 0.56
-    caret_y0 = bot_y - caret_h / 2
-    d.rectangle([caret_x0, caret_y0, caret_x0 + caret_w, caret_y0 + caret_h], fill=FG)
+    # Stem — connects the head straight down to the base, no gap (a gap
+    # would vanish into anti-aliasing noise at the smallest sizes).
+    stem_w = MASTER * 0.09
+    stem_x0 = cx - stem_w / 2
+    stem_x1 = cx + stem_w / 2
+    stem_y0 = head_y1
+    stem_y1 = MASTER * 0.80
+    d.rectangle([stem_x0, stem_y0, stem_x1, stem_y1], fill=FG)
+
+    # Base — the stand's foot, wider than the stem so the silhouette
+    # doesn't read as a plain lollipop at a glance.
+    base_w = MASTER * 0.34
+    base_h = MASTER * 0.07
+    base_x0 = cx - base_w / 2
+    base_x1 = cx + base_w / 2
+    base_y0 = stem_y1
+    base_y1 = base_y0 + base_h
+    d.rounded_rectangle([base_x0, base_y0, base_x1, base_y1], radius=base_h / 2, fill=FG)
 
     return img
 
