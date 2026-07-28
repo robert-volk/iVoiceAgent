@@ -28,7 +28,9 @@ voice" — so this app doesn't pretend to. It ships two voices behind one `Voice
 
 ### This app is not fully local
 
-Every answer is a Claude API call (`claude-opus-5`). Speech-to-text stays entirely on-device, and
+Every answer is a Claude API call (`claude-haiku-4-5` — swapped from Opus 5 after testing found
+the larger model too slow for a live voice conversation; trades some answer quality for speed).
+Speech-to-text stays entirely on-device, and
 everything it remembers about you lives only in this app's local storage — but **the question text
 and what it currently remembers about you are sent to Anthropic** on every turn (it needs that
 context to actually use what it's learned), and **web search queries leave the device** whenever

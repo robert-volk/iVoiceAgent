@@ -221,7 +221,15 @@ final class AgentViewModel: ObservableObject {
         trimHistoryAndTranscript()
         dictation.stopWatchingForBargeIn()
         currentStreamTask = nil
-        phase = .idle
+
+        // Loop straight back into listening rather than idle -- a normal,
+        // uninterrupted reply is the common case, and requiring a tap for
+        // every single turn added a full extra step to what's meant to be
+        // a flowing conversation. An explicit Stop (stopAnswering) or an
+        // error still goes to idle, since those are the user or the app
+        // deliberately ending things rather than a reply completing
+        // normally.
+        startListening()
 
         // Learning what to remember happens in the background, after the
         // spoken answer is already finished — never delays anything the

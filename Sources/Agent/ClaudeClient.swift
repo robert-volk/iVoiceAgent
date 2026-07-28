@@ -40,7 +40,12 @@ enum ClaudeClientError: LocalizedError {
 /// than reaching for a third-party wrapper.
 final class ClaudeClient {
     private static let endpoint = URL(string: "https://api.anthropic.com/v1/messages")!
-    private static let model = "claude-opus-5"
+    // Fastest/cheapest model in the current lineup, for both the spoken
+    // answer and the background fact-extraction call -- swapped from
+    // claude-opus-5 after testing found overall response latency too
+    // slow for a live voice conversation. Trades some answer quality for
+    // speed; worth revisiting if that trade stops feeling right.
+    private static let model = "claude-haiku-4-5-20251001"
     private static let maxContinuations = 3
 
     private let apiKey: String
