@@ -120,12 +120,28 @@ final class CorpusStore: ObservableObject {
         folderLabel = settings.corpusBookmarkData != nil ? "Voice Agent (iCloud)" : "Voice Agent (local)"
         lastError = nil
 
+        // Plain FileManager.contentsOfDirectory reads local, cached
+        // filesystem state -- it does not reliably surface iCloud items
+        // that exist upstream but haven't synced their metadata to this
+        // device yet (seen in testing: real PDFs sitting in the iCloud
+        // folder, visible and greyed-out in Files, but invisible to a
+        // plain directory listing here). NSFileCoordinator's coordinated
+        // read is Apple's documented way to force a directory listing to
+        // reflect current iCloud state rather than a stale local cache.
         let files: [URL] = withFolderAccess { folder in
-            (try? FileManager.default.contentsOfDirectory(
-                at: folder,
-                includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey],
-                options: [.skipsHiddenFiles]
-            )) ?? []
+            var result: [URL] = []
+            var coordinatorError: NSError?
+            NSFileCoordinator().coordinate(readingItemAt: folder, options: [], error: &coordinatorError) { coordinatedURL in
+                result = (try? FileManager.default.contentsOfDirectory(
+                    at: coordinatedURL,
+                    includingPropertiesForKeys: [.contentModificationDateKey, .fileSizeKey],
+                    options: [.skipsHiddenFiles]
+                )) ?? []
+            }
+            if let coordinatorError {
+                lastError = "Couldn't read your folder: \(coordinatorError.localizedDescription)"
+            }
+            return result
         }
 
         let supportedFiles = files.filter { TextExtractor.supportedExtensions.contains($0.pathExtension.lowercased()) }
