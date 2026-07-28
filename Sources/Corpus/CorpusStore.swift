@@ -96,18 +96,34 @@ final class CorpusStore: ObservableObject {
         let didAccessSource = sourceURL.startAccessingSecurityScopedResource()
         defer { if didAccessSource { sourceURL.stopAccessingSecurityScopedResource() } }
 
+        // Same iCloud-placeholder issue as the folder scan, hit from a
+        // different angle: a file picked via `+` can be a cloud-only
+        // placeholder never downloaded to this device, and a direct
+        // FileManager.copyItem from it fails with "no such file" --
+        // confirmed by testing. A coordinated read on the source is
+        // documented to wait for an undownloaded ubiquitous item to
+        // materialize before running its accessor, so the copy can just
+        // work directly instead of requiring the user to notice a
+        // "downloading" message and manually retry.
         let copySucceeded: Bool = withFolderAccess { folder in
             let destination = folder.appendingPathComponent(sourceURL.lastPathComponent)
-            do {
-                if FileManager.default.fileExists(atPath: destination.path) {
-                    try FileManager.default.removeItem(at: destination)
+            var coordinatorError: NSError?
+            var succeeded = false
+            NSFileCoordinator().coordinate(readingItemAt: sourceURL, options: [], error: &coordinatorError) { coordinatedURL in
+                do {
+                    if FileManager.default.fileExists(atPath: destination.path) {
+                        try FileManager.default.removeItem(at: destination)
+                    }
+                    try FileManager.default.copyItem(at: coordinatedURL, to: destination)
+                    succeeded = true
+                } catch {
+                    lastError = "Couldn't import \(sourceURL.lastPathComponent): \(error.localizedDescription)"
                 }
-                try FileManager.default.copyItem(at: sourceURL, to: destination)
-                return true
-            } catch {
-                lastError = "Couldn't import \(sourceURL.lastPathComponent): \(error.localizedDescription)"
-                return false
             }
+            if let coordinatorError {
+                lastError = "Couldn't import \(sourceURL.lastPathComponent): \(coordinatorError.localizedDescription)"
+            }
+            return succeeded
         }
         // A copy failure's error would otherwise be overwritten almost
         // immediately by rescan()'s unconditional `lastError = nil` reset
@@ -173,7 +189,28 @@ final class CorpusStore: ObservableObject {
             if fileSignatures[filename] == signature { continue }  // unchanged since last scan
 
             do {
-                let document = try withFolderAccess { _ in try TextExtractor.extract(from: fileURL) }
+                // Coordinated read, same reasoning as the folder listing
+                // above and the `+` import path: the downloading-status
+                // check just above is a fast pre-filter, not a guarantee --
+                // this is the belt-and-suspenders version that actually
+                // waits for the real content if that check somehow let a
+                // not-fully-materialized file through.
+                var coordinatorError: NSError?
+                var extracted: ExtractedDocument?
+                var extractionError: Error?
+                try withFolderAccess { _ in
+                    NSFileCoordinator().coordinate(readingItemAt: fileURL, options: [], error: &coordinatorError) { coordinatedURL in
+                        do {
+                            extracted = try TextExtractor.extract(from: coordinatedURL)
+                        } catch {
+                            extractionError = error
+                        }
+                    }
+                }
+                if let coordinatorError { throw coordinatorError }
+                if let extractionError { throw extractionError }
+                guard let document = extracted else { throw TextExtractorError.unreadable }
+
                 let chunks = Chunker.chunk(document)
                 index.replaceChunks(forFilename: filename, with: chunks)
                 fileSignatures[filename] = signature
