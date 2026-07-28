@@ -34,11 +34,27 @@ targets:
       - path: Sources
     resources:
       - path: Resources/Assets.xcassets
-      # Loose app-icon PNGs copied to the bundle root, referenced by
-      # CFBundleIconFiles in Info.plist. This legacy method reliably shows the
-      # home-screen icon for sideloaded (AltStore) builds, unlike the asset
-      # catalog app icon which wasn't being embedded (see iVoice).
-      - path: Resources/AppIcons
+      # Loose app-icon PNGs, referenced by CFBundleIconFiles in Info.plist,
+      # which only looks at the bundle's top level -- it does not search
+      # subdirectories. Listed individually rather than as
+      # `path: Resources/AppIcons` on purpose: XcodeGen's default for a
+      # bare folder path is a folder REFERENCE (blue folder), which
+      # preserves the subfolder structure when copied, landing these at
+      # VoiceAgent.app/AppIcons/AppIcon60x60@3x.png instead of
+      # VoiceAgent.app/AppIcon60x60@3x.png -- invisible to
+      # CFBundleIconFiles either way, which is almost certainly why the
+      # home-screen icon never changed on any build, regardless of what
+      # was actually drawn. Individual file entries always copy to the
+      # bundle root, sidestepping the folder-reference-vs-group ambiguity
+      # entirely.
+      - path: Resources/AppIcons/AppIcon20x20@2x.png
+      - path: Resources/AppIcons/AppIcon20x20@3x.png
+      - path: Resources/AppIcons/AppIcon29x29@2x.png
+      - path: Resources/AppIcons/AppIcon29x29@3x.png
+      - path: Resources/AppIcons/AppIcon40x40@2x.png
+      - path: Resources/AppIcons/AppIcon40x40@3x.png
+      - path: Resources/AppIcons/AppIcon60x60@2x.png
+      - path: Resources/AppIcons/AppIcon60x60@3x.png
     # Use our hand-maintained Info.plist verbatim. Do NOT use XcodeGen's `info:`
     # directive here — it regenerates (overwrites) the file and strips custom
     # keys like NSMicrophoneUsageDescription, which makes iOS crash on mic access.

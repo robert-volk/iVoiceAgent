@@ -58,6 +58,34 @@ jobs:
             CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
             clean build
 
+      - name: Verify app icon landed at the bundle root
+        run: |
+          set -euo pipefail
+          APP_PATH="build/Build/Products/Release-iphoneos/VoiceAgent.app"
+          # CFBundleIconFiles (Info.plist) only looks at the bundle's top
+          # level -- it does not search subdirectories. A prior version of
+          # project.yml pointed at Resources/AppIcons as a bare folder
+          # path, which XcodeGen turned into a folder REFERENCE that
+          # preserves the subfolder structure on copy, silently landing
+          # these one level too deep and leaving every build with no
+          # visible home-screen icon at all. Fail loudly instead of
+          # shipping that silently again.
+          missing=0
+          for f in AppIcon60x60@2x.png AppIcon60x60@3x.png AppIcon40x40@2x.png AppIcon40x40@3x.png \
+                   AppIcon29x29@2x.png AppIcon29x29@3x.png AppIcon20x20@2x.png AppIcon20x20@3x.png; do
+            if [ ! -f "$APP_PATH/$f" ]; then
+              echo "MISSING at bundle root: $f"
+              missing=1
+            fi
+          done
+          if [ "$missing" -eq 1 ]; then
+            echo "App icon PNGs did not land at the bundle root -- see project.yml resources."
+            echo "Bundle contents for debugging:"
+            find "$APP_PATH" -maxdepth 2
+            exit 1
+          fi
+          echo "All app icon files present at bundle root."
+
       - name: Package unsigned IPA
         run: |
           APP_PATH="build/Build/Products/Release-iphoneos/VoiceAgent.app"
