@@ -1,9 +1,23 @@
 import Foundation
 
+/// What `prepare(_:)` hands back to `play(_:)`. The on-device voice has
+/// nothing to prepare ahead of time — `AVSpeechSynthesizer` takes text
+/// directly — so it just carries the text through; the network-backed
+/// voice carries already-synthesized audio.
+enum VoiceUtterance {
+    case text(String)
+    case audio(Data)
+}
+
 /// Abstraction over "speak this sentence out loud." The agent speaks answers
 /// one sentence at a time as they stream in (see AgentViewModel), so the unit
 /// of work here is a single sentence, not a whole answer — that's what lets
 /// speech start before the model has finished thinking.
+///
+/// `prepare`/`play` are split rather than one `speak(_:)` call so that, for a
+/// network-backed voice, sentence N+1's synthesis can run concurrently with
+/// sentence N's playback instead of paying a full round-trip of dead air
+/// between every sentence — see AgentViewModel.speak(_:).
 ///
 /// Two implementations ship: `SystemVoice` (on-device, free, always
 /// available) and `BreezeVoice` (opt-in, needs a key and a voice ID, sounds
@@ -13,10 +27,12 @@ import Foundation
 protocol VoiceProvider {
     var requiresNetwork: Bool { get }
 
-    /// Speak one sentence. Suspends until playback finishes naturally, is
-    /// cancelled via `stop()`, or throws. Callers await this in a queue so
-    /// sentence N+1 doesn't start until sentence N has finished playing.
-    func speak(_ sentence: String) async throws
+    /// Prepares a sentence to be spoken, without playing it yet.
+    func prepare(_ sentence: String) async throws -> VoiceUtterance
+
+    /// Plays an already-prepared utterance. Suspends until playback
+    /// finishes naturally, is cancelled via `stop()`, or throws.
+    func play(_ utterance: VoiceUtterance) async throws
 
     /// Stop whatever is currently playing immediately. Used for barge-in.
     func stop()

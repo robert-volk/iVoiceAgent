@@ -15,7 +15,14 @@ final class SystemVoice: NSObject, VoiceProvider {
         synthesizer.delegate = self
     }
 
-    func speak(_ sentence: String) async throws {
+    /// Nothing to prepare ahead of time for the on-device voice — it just
+    /// carries the text through to `play(_:)`.
+    func prepare(_ sentence: String) async throws -> VoiceUtterance {
+        .text(sentence)
+    }
+
+    func play(_ utterance: VoiceUtterance) async throws {
+        guard case .text(let sentence) = utterance else { return }
         let trimmed = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
@@ -24,11 +31,11 @@ final class SystemVoice: NSObject, VoiceProvider {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             pendingContinuation = continuation
 
-            let utterance = AVSpeechUtterance(string: trimmed)
-            utterance.voice = Self.preferredVoice()
-            utterance.rate = AVSpeechUtteranceDefaultSpeechRate
-            utterance.pitchMultiplier = 1.0
-            synthesizer.speak(utterance)
+            let speechUtterance = AVSpeechUtterance(string: trimmed)
+            speechUtterance.voice = Self.preferredVoice()
+            speechUtterance.rate = AVSpeechUtteranceDefaultSpeechRate
+            speechUtterance.pitchMultiplier = 1.0
+            synthesizer.speak(speechUtterance)
         }
     }
 

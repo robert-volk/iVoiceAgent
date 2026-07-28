@@ -49,14 +49,18 @@ final class BreezeVoice: NSObject, VoiceProvider {
         return http.statusCode == 200
     }
 
-    func speak(_ sentence: String) async throws {
+    func prepare(_ sentence: String) async throws -> VoiceUtterance {
         let trimmed = sentence.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-
+        guard !trimmed.isEmpty else { return .audio(Data()) }
         try Task.checkCancellation()
         let audioData = try await synthesize(trimmed)
+        return .audio(audioData)
+    }
+
+    func play(_ utterance: VoiceUtterance) async throws {
+        guard case .audio(let data) = utterance, !data.isEmpty else { return }
         try Task.checkCancellation()
-        try await play(audioData)
+        try await play(data)
     }
 
     func stop() {

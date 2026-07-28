@@ -43,6 +43,11 @@ final class AgentViewModel: ObservableObject {
     private var voiceProvider: VoiceProvider = VoiceProviderFactory.current()
     private var currentStreamTask: Task<Void, Never>?
     private var history: [ConversationTurn] = []
+    /// In-flight `prepare()` calls for the sentence(s) currently being
+    /// spoken — tracked so barge-in/Stop can cancel them, since a plain
+    /// `Task { ... }` isn't automatically cancelled just because the
+    /// enclosing `currentStreamTask` is. See `speak(_:)`.
+    private var pendingPrepareTasks: [Task<VoiceUtterance, Error>] = []
 
     /// "Last ~10 turns" — a turn is a user+agent pair, so this caps the
     /// transcript at 20 entries and the model's own history at the same.
@@ -104,6 +109,8 @@ final class AgentViewModel: ObservableObject {
 
     private func stopAnswering(returnToIdle: Bool) {
         voiceProvider.stop()
+        pendingPrepareTasks.forEach { $0.cancel() }
+        pendingPrepareTasks.removeAll()
         currentStreamTask?.cancel()
         currentStreamTask = nil
         dictation.stopWatchingForBargeIn()
@@ -184,9 +191,25 @@ final class AgentViewModel: ObservableObject {
         }
     }
 
+    /// Kicks off `prepare()` for every sentence in this batch immediately
+    /// (all at once, not one at a time), then plays them in order. For a
+    /// network-backed voice, this overlaps sentence N+1's synthesis with
+    /// sentence N's playback instead of paying a full round-trip of dead
+    /// air between every sentence -- confirmed by testing as the source of
+    /// "too much pause between sentences."
     private func speak(_ sentences: [String]) async throws {
-        for sentence in sentences {
-            try await voiceProvider.speak(sentence)
+        guard !sentences.isEmpty else { return }
+        let provider = voiceProvider
+        let tasks = sentences.map { sentence in
+            Task { try await provider.prepare(sentence) }
+        }
+        pendingPrepareTasks = tasks
+        defer { pendingPrepareTasks.removeAll() }
+
+        for task in tasks {
+            try Task.checkCancellation()
+            let utterance = try await task.value
+            try await provider.play(utterance)
         }
     }
 
