@@ -33,9 +33,12 @@ the larger model too slow for a live voice conversation; trades some answer qual
 Speech-to-text stays entirely on-device, and
 everything it remembers about you lives only in this app's local storage — but **the question text
 and what it currently remembers about you are sent to Anthropic** on every turn (it needs that
-context to actually use what it's learned), and **web search queries leave the device** whenever
-the agent decides it needs to look something up. There's a one-line version of this on first
-launch; this is the full version.
+context to actually use what it's learned). There's a one-line version of this on first launch;
+this is the full version.
+
+**No web search.** `claude-haiku-4-5` doesn't support tool calling at all — confirmed by a real
+400 error when `web_search` was still wired up from an earlier version of this app. The agent only
+knows what it already knows; it says so plainly rather than pretending to look things up.
 
 ---
 
@@ -62,24 +65,21 @@ about you so far, with the ability to forget any of it, or all of it.
    the system prompt on every single call — a fact learned mid-conversation is available on the
    very next turn, not just the next app launch.
 2. **Learning happens after the spoken answer, not during it.** Once a turn finishes, a second,
-   separate, non-streaming call goes to Claude in the background — cheap, tool-free, `effort: low`
-   — asking it to name one new durable fact worth remembering from that exchange, if any (a
-   preference, a relationship, a job, a goal, a correction to something already known — not small
-   talk). This never delays or blocks the spoken answer; by the time it comes back, the agent has
-   usually already finished talking. If something new comes back, it's saved locally and a short
-   note appears on screen: `Remembered: ...`.
+   separate, non-streaming call goes to Claude in the background — cheap and tool-free — asking it
+   to name one new durable fact worth remembering from that exchange, if any (a preference, a
+   relationship, a job, a goal, a correction to something already known — not small talk). This
+   never delays or blocks the spoken answer; by the time it comes back, the agent has usually
+   already finished talking. If something new comes back, it's saved locally and a short note
+   appears on screen: `Remembered: ...`.
 3. **A tool-free follow-up call, not a client-side tool the model invokes mid-answer**, on purpose —
-   the main streaming path only has to handle text and `web_search`, keeping its failure modes
-   limited to what's already been exercised, rather than adding a full tool-use round-trip loop to
-   a path that also has to stay responsive for barge-in.
+   keeping the main streaming path simple, rather than adding a full tool-use round-trip loop to a
+   path that also has to stay responsive for barge-in. (Moot for now anyway — `claude-haiku-4-5`
+   doesn't support tool calling at all, so there's no `web_search` fallback in this version; see
+   the honest note above.)
 4. **It asks about you too.** The system prompt doesn't just wait for facts to come up — it's
    instructed to ask genuine, one-at-a-time questions about your life when there's a natural
    opening, leaning into that more when little is known yet and easing off as it learns more.
-5. **The source chip** still flips from hidden to amber ("web · N results") the instant the model's
-   stream shows it invoking `web_search` — not by guessing from the model's wording. There's no
-   more "local vs. web" distinction the way there was when this app was grounded in a document
-   folder; the chip now only ever means "this answer involved a web search."
-6. **Settings shows the whole list, plainly.** Nothing is hidden or summarized — every fact it's
+5. **Settings shows the whole list, plainly.** Nothing is hidden or summarized — every fact it's
    stored is listed exactly as saved, swipeable to forget individually, or all at once.
 
 ---
@@ -148,8 +148,8 @@ Sources/
 - **Learning**: a second, separate call after each turn, asking Claude to name any new fact worth
   keeping from that exchange. Same exposure as the main call — the exchange and current memory
   leave the device for this step too.
-- **Web search**: when the agent decides it needs to look something up, the search query leaves the
-  device via Anthropic's `web_search` tool.
+- **Web search**: none. `claude-haiku-4-5` doesn't support tool calling, so there's no `web_search`
+  fallback in this version — the agent only ever answers from what it already knows.
 - **Voice**: on-device by default (nothing leaves the device for speech output). Entering a
   Breeze key and voice ID sends the text being spoken to Breeze (breezeblue.ai) for synthesis.
 - **API keys**: stored in the iOS Keychain, never in source, never in `UserDefaults`.

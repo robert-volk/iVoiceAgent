@@ -4,9 +4,16 @@ import Foundation
 /// rebuilt fresh for every request in AgentViewModel.beginAnswering — a fact
 /// learned mid-conversation is available on the very next turn, not just
 /// future app launches. See ClaudeClient.swift for how the request is
-/// assembled, and SourceTracker.swift for how the UI reacts to the
-/// `web_search` tool actually being invoked (the source of truth is the
-/// stream event, not this prompt being obeyed).
+/// assembled.
+///
+/// No web_search tool: `claude-haiku-4-5` (swapped in for speed) doesn't
+/// support tool calling at all -- confirmed by a real 400 ("does not
+/// support programmatic tool calling") when it was still wired up. The
+/// prompt says so plainly rather than telling the model it has a lookup
+/// capability it doesn't actually have, which would otherwise risk it
+/// claiming "let me check" and then just answering from memory anyway.
+/// SourceTracker/SourceChipView are left in place, unused for now, in case
+/// a future model swap brings tool support back.
 enum SystemPrompt {
     static func text(knownFacts: String) -> String {
         let factsSection = knownFacts.isEmpty
@@ -34,13 +41,9 @@ enum SystemPrompt {
         Early on, when you know little about them, lean toward asking more; once you know \
         them better, let it happen more naturally and less often.
 
-        You have a web_search tool for anything you don't already know — current events, \
-        facts, anything outside general knowledge. Before searching, say so in one \
-        natural spoken sentence first — for example "Let me look that up," or "I don't \
-        know that one off the top of my head, checking now." Never search silently.
-
-        If you don't know something and a web search wouldn't help either, say so \
-        plainly rather than guessing.
+        You have no way to search the web or look anything up — only what you already \
+        know. If you don't know something, especially anything current or time-sensitive, \
+        say so plainly rather than guessing or making something up.
         """
     }
 }

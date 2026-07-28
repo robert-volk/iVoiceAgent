@@ -167,7 +167,6 @@ final class ClaudeClient {
             "max_tokens": 1024,
             "stream": true,
             "system": SystemPrompt.text(knownFacts: knownFacts),
-            "tools": [["type": "web_search_20260209", "name": "web_search"]],
             "messages": messages
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
