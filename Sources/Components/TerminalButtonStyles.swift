@@ -17,19 +17,3 @@ struct TerminalPrimaryButtonStyle: ButtonStyle {
             )
     }
 }
-
-/// The `+` (add document) button: quiet hairline border, dim glyph.
-struct TerminalSecondaryButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .foregroundStyle(Theme.dim)
-            .background(
-                RoundedRectangle(cornerRadius: Theme.cornerRadius)
-                    .fill(configuration.isPressed ? Theme.hairline : Color.clear)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: Theme.cornerRadius)
-                    .stroke(Theme.hairline, lineWidth: 1)
-            )
-    }
-}

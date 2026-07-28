@@ -1,9 +1,6 @@
 import Foundation
 
-/// One prior turn of conversation, kept as plain text — only the *current*
-/// question gets document blocks attached (see `userTurnJSON`), since each
-/// turn re-retrieves its own excerpts independently rather than
-/// accumulating documents across the whole conversation.
+/// One prior turn of conversation, kept as plain text.
 struct ConversationTurn {
     enum Role: String { case user, assistant }
     let role: Role
@@ -16,13 +13,12 @@ struct WebSearchResult {
 }
 
 /// High-level events the UI actually reacts to. `SourceTracker` turns these
-/// into the on-screen `.folder` / `.web` state; `AgentViewModel` turns the
-/// text deltas into speech, sentence by sentence.
+/// into the on-screen `.web` state; `AgentViewModel` turns the text deltas
+/// into speech, sentence by sentence.
 enum ClaudeStreamEvent {
     case textDelta(String)
     case webSearchStarted
     case webSearchResults([WebSearchResult])
-    case citation(filename: String, pageNumber: Int?)
     case refused
     case finished(stopReason: String)
 }
@@ -53,16 +49,17 @@ final class ClaudeClient {
         self.apiKey = apiKey
     }
 
-    /// Streams one full answer, including automatic `pause_turn`
+    /// Streams one full spoken answer, including automatic `pause_turn`
     /// continuations (capped at `maxContinuations` — a multi-round web
     /// search inside a single turn can legitimately hit the model's
-    /// server-tool iteration limit).
-    func streamAnswer(history: [ConversationTurn], question: String, excerpts: [Excerpt]) -> AsyncThrowingStream<ClaudeStreamEvent, Error> {
+    /// server-tool iteration limit). `knownFacts` is folded into the system
+    /// prompt fresh on every call — see SystemPrompt.swift.
+    func streamAnswer(history: [ConversationTurn], question: String, knownFacts: String) -> AsyncThrowingStream<ClaudeStreamEvent, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
                     var messages = history.map(Self.turnJSON)
-                    messages.append(Self.userTurnJSON(question: question, excerpts: excerpts))
+                    messages.append(["role": "user", "content": question])
 
                     var attempts = 0
                     var lastStopReason = "end_turn"
@@ -70,7 +67,7 @@ final class ClaudeClient {
                     while true {
                         try Task.checkCancellation()
                         let (stopReason, content) = try await self.streamOnce(
-                            messages: messages, excerpts: excerpts, continuation: continuation
+                            messages: messages, knownFacts: knownFacts, continuation: continuation
                         )
                         lastStopReason = stopReason
 
@@ -98,11 +95,62 @@ final class ClaudeClient {
         }
     }
 
+    /// A lightweight, non-streaming, tool-free follow-up call after a turn
+    /// completes — asks the model to name one new durable fact about the
+    /// person worth remembering long-term, if any, given what's already
+    /// known. Runs in the background after the spoken answer is already
+    /// finished (see AgentViewModel.finishTurn); never blocks or delays
+    /// anything the user hears. A separate call rather than a client-side
+    /// tool the model invokes mid-stream, to keep the main streaming path's
+    /// failure modes limited to what's already been hardened there.
+    func extractFact(question: String, answer: String, knownFacts: String) async throws -> String? {
+        var request = URLRequest(url: Self.endpoint)
+        request.httpMethod = "POST"
+        request.setValue(apiKey, forHTTPHeaderField: "x-api-key")
+        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+        request.setValue("application/json", forHTTPHeaderField: "content-type")
+
+        let prompt = """
+        Conversation exchange:
+        User: \(question)
+        Agent: \(answer)
+
+        Already known about this person:
+        \(knownFacts.isEmpty ? "(nothing yet)" : knownFacts)
+
+        If this exchange reveals one new durable fact about the person worth remembering \
+        long-term (a preference, a relationship, a job, a goal, a recurring interest, or a \
+        correction to something already known) — not small talk, not the weather, not a \
+        one-off question — reply with ONLY that fact as a single short sentence, written in \
+        third person (e.g. "Works as an electrician," not "I work as..."). If there's \
+        nothing worth remembering, reply with exactly: NONE
+        """
+
+        let body: [String: Any] = [
+            "model": Self.model,
+            "max_tokens": 100,
+            "thinking": ["type": "adaptive"],
+            "output_config": ["effort": "low"],
+            "messages": [["role": "user", "content": prompt]]
+        ]
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { return nil }
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let content = json["content"] as? [[String: Any]],
+              let firstText = content.first(where: { ($0["type"] as? String) == "text" })?["text"] as? String
+        else { return nil }
+
+        let trimmed = firstText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (trimmed.isEmpty || trimmed.uppercased() == "NONE") ? nil : trimmed
+    }
+
     // MARK: - One HTTP request / SSE stream
 
     private func streamOnce(
         messages: [[String: Any]],
-        excerpts: [Excerpt],
+        knownFacts: String,
         continuation: AsyncThrowingStream<ClaudeStreamEvent, Error>.Continuation
     ) async throws -> (stopReason: String, content: [[String: Any]]) {
         var request = URLRequest(url: Self.endpoint)
@@ -115,7 +163,7 @@ final class ClaudeClient {
             "model": Self.model,
             "max_tokens": 1024,
             "stream": true,
-            "system": SystemPrompt.text,
+            "system": SystemPrompt.text(knownFacts: knownFacts),
             "thinking": ["type": "adaptive"],
             "output_config": ["effort": "low"],
             "tools": [["type": "web_search_20260209", "name": "web_search"]],
@@ -134,11 +182,6 @@ final class ClaudeClient {
                 ?? "HTTP \(http.statusCode)"
             throw ClaudeClientError.api(http.statusCode, message)
         }
-
-        // document_index (as sent to the API, in request order) -> our own
-        // Excerpt, so a citation delta maps straight back to a real
-        // filename/page without trusting the model to echo it in prose.
-        let excerptsByIndex = Dictionary(uniqueKeysWithValues: excerpts.enumerated().map { ($0.offset, $0.element) })
 
         var blocks: [Int: BlockState] = [:]
         var order: [Int] = []
@@ -178,17 +221,8 @@ final class ClaudeClient {
                 else { continue }
                 state.applyDelta(delta)
 
-                switch delta["type"] as? String {
-                case "text_delta":
-                    if let text = delta["text"] as? String { continuation.yield(.textDelta(text)) }
-                case "citations_delta":
-                    if let citation = delta["citation"] as? [String: Any],
-                       let docIndex = citation["document_index"] as? Int,
-                       let excerpt = excerptsByIndex[docIndex] {
-                        continuation.yield(.citation(filename: excerpt.filename, pageNumber: excerpt.pageNumber))
-                    }
-                default:
-                    break
+                if delta["type"] as? String == "text_delta", let text = delta["text"] as? String {
+                    continuation.yield(.textDelta(text))
                 }
 
             case "message_delta":
@@ -218,30 +252,6 @@ final class ClaudeClient {
     private static func turnJSON(_ turn: ConversationTurn) -> [String: Any] {
         ["role": turn.role.rawValue, "content": turn.text]
     }
-
-    /// Attaches the current turn's retrieved excerpts as citation-enabled
-    /// `document` blocks ahead of the question text, so grounded answers
-    /// come back with real citations instead of the model naming a file
-    /// from memory. See SystemPrompt.swift for the accompanying instruction
-    /// not to read citation/page detail aloud.
-    private static func userTurnJSON(question: String, excerpts: [Excerpt]) -> [String: Any] {
-        guard !excerpts.isEmpty else {
-            return ["role": "user", "content": question]
-        }
-
-        var content: [[String: Any]] = excerpts.map { excerpt in
-            var title = excerpt.filename
-            if let page = excerpt.pageNumber { title += " · p. \(page)" }
-            return [
-                "type": "document",
-                "source": ["type": "text", "media_type": "text/plain", "data": excerpt.text],
-                "title": title,
-                "citations": ["enabled": true]
-            ] as [String: Any]
-        }
-        content.append(["type": "text", "text": question])
-        return ["role": "user", "content": content]
-    }
 }
 
 /// Reconstructs one content block from its `content_block_start` payload
@@ -263,7 +273,6 @@ private final class BlockState {
     var raw: [String: Any]
     private var textAccumulator = ""
     private var jsonAccumulator = ""
-    private var citationsAccumulator: [[String: Any]] = []
 
     init(raw: [String: Any]) {
         self.raw = raw
@@ -277,8 +286,6 @@ private final class BlockState {
             if let text = delta["thinking"] as? String { textAccumulator += text }
         case "input_json_delta":
             if let partial = delta["partial_json"] as? String { jsonAccumulator += partial }
-        case "citations_delta":
-            if let citation = delta["citation"] as? [String: Any] { citationsAccumulator.append(citation) }
         case "signature_delta":
             if let signature = delta["signature"] as? String { raw["signature"] = signature }
         default:
@@ -291,7 +298,6 @@ private final class BlockState {
         switch raw["type"] as? String {
         case "text":
             block["text"] = textAccumulator
-            if !citationsAccumulator.isEmpty { block["citations"] = citationsAccumulator }
         case "thinking":
             block["thinking"] = textAccumulator
         case "server_tool_use", "tool_use":

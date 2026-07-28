@@ -12,7 +12,6 @@ final class AppSettings: ObservableObject {
 
     private enum Keys {
         static let hasSeenFirstLaunch = "hasSeenFirstLaunch"
-        static let corpusBookmark = "corpusBookmarkData"
         static let breezeVoiceID = "breezeVoiceID"
     }
 
@@ -27,13 +26,6 @@ final class AppSettings: ObservableObject {
         didSet { UserDefaults.standard.set(hasSeenFirstLaunch, forKey: Keys.hasSeenFirstLaunch) }
     }
 
-    /// Security-scoped bookmark to the user-picked iCloud (or other Files
-    /// provider) folder. Nil until the user completes the one-time folder
-    /// pick; CorpusStore falls back to a local sandbox folder until then.
-    @Published var corpusBookmarkData: Data? {
-        didSet { UserDefaults.standard.set(corpusBookmarkData, forKey: Keys.corpusBookmark) }
-    }
-
     @Published var breezeVoiceID: String {
         didSet { UserDefaults.standard.set(breezeVoiceID, forKey: Keys.breezeVoiceID) }
     }
@@ -41,7 +33,6 @@ final class AppSettings: ObservableObject {
     private init() {
         let defaults = UserDefaults.standard
         hasSeenFirstLaunch = defaults.bool(forKey: Keys.hasSeenFirstLaunch)
-        corpusBookmarkData = defaults.data(forKey: Keys.corpusBookmark)
         breezeVoiceID = defaults.string(forKey: Keys.breezeVoiceID) ?? Self.defaultBreezeVoiceID
     }
 }

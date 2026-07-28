@@ -1,19 +1,16 @@
 import SwiftUI
 
 /// THE screen — the only view in this app. No tabs, no navigation stack; the
-/// only modal is the system file picker and the Settings sheet.
+/// only modal is the Settings sheet.
 struct AgentView: View {
     @StateObject private var viewModel: AgentViewModel
     @ObservedObject private var dictation: DictationController
-    @ObservedObject private var corpus: CorpusStore
+    @ObservedObject private var memory: MemoryStore
     @ObservedObject private var settings = AppSettings.shared
 
-    @Environment(\.scenePhase) private var scenePhase
-
     @State private var showingSettings = false
-    @State private var showingImporter = false
 
-    /// `viewModel`'s child objects (`dictation`, `corpus`) are also observed
+    /// `viewModel`'s child objects (`dictation`, `memory`) are also observed
     /// directly here — a plain `let` reference on `viewModel` alone wouldn't
     /// propagate their own `@Published` changes up to this view, since
     /// SwiftUI only tracks objects actually held via `@StateObject` /
@@ -23,7 +20,7 @@ struct AgentView: View {
         let vm = AgentViewModel()
         _viewModel = StateObject(wrappedValue: vm)
         _dictation = ObservedObject(wrappedValue: vm.dictation)
-        _corpus = ObservedObject(wrappedValue: vm.corpus)
+        _memory = ObservedObject(wrappedValue: vm.memory)
     }
 
     var body: some View {
@@ -42,15 +39,16 @@ struct AgentView: View {
                 Text(error)
                     .font(Theme.monoLabel)
                     .foregroundStyle(Theme.webAccent)
+                    .lineLimit(3)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.bottom, 8)
             }
 
-            if let corpusError = corpus.lastError {
-                Text(corpusError)
+            if let remembered = viewModel.justRemembered {
+                Text("Remembered: \(remembered)")
                     .font(Theme.monoLabel)
-                    .foregroundStyle(Theme.webAccent)
-                    .lineLimit(3)
+                    .foregroundStyle(Theme.agentText)
+                    .lineLimit(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.bottom, 8)
             }
@@ -70,24 +68,10 @@ struct AgentView: View {
         .task {
             await viewModel.onAppear()
         }
-        .onChange(of: scenePhase) { _, newPhase in
-            if newPhase == .active {
-                Task { await viewModel.onForeground() }
-            }
-        }
         .sheet(isPresented: $showingSettings, onDismiss: {
             settings.hasSeenFirstLaunch = true
         }) {
-            SettingsSheet(onPickFolder: { url in corpus.saveFolderSelection(url) })
-        }
-        .fileImporter(
-            isPresented: $showingImporter,
-            allowedContentTypes: TextExtractor.supportedContentTypes,
-            allowsMultipleSelection: false
-        ) { result in
-            if case .success(let urls) = result, let url = urls.first {
-                viewModel.importFile(url)
-            }
+            SettingsSheet(memory: memory)
         }
     }
 
@@ -95,28 +79,20 @@ struct AgentView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            Text("~/voice-agent · \(corpus.indexedDocumentCount) docs indexed")
+            Text("~/voice-agent · \(memory.facts.count) things remembered")
                 .font(Theme.monoLabel)
                 .foregroundStyle(Theme.dim)
                 .lineLimit(1)
-            if corpus.isIndexing {
-                ProgressView()
-                    .controlSize(.small)
-                    .tint(Theme.dim)
-            }
             Spacer(minLength: 0)
         }
         .contentShape(Rectangle())
-        .onTapGesture {
-            Task { await viewModel.rescanFolder() }
-        }
         .onLongPressGesture {
             showingSettings = true
         }
         .padding(.bottom, 12)
         .accessibilityAddTraits(.isButton)
-        .accessibilityLabel("Voice Agent, \(corpus.indexedDocumentCount) documents indexed")
-        .accessibilityHint("Tap to rescan your folder. Long-press for settings.")
+        .accessibilityLabel("Voice Agent, \(memory.facts.count) things remembered")
+        .accessibilityHint("Long-press for settings.")
     }
 
     // MARK: - First-launch note
@@ -125,7 +101,7 @@ struct AgentView: View {
         Button {
             showingSettings = true
         } label: {
-            Text(firstLaunchMessage)
+            Text("Add your Anthropic key in Settings to talk to the agent. A Breeze key and voice ID are optional, for a more natural voice.")
                 .font(Theme.monoLabel)
                 .foregroundStyle(Theme.dim)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -135,35 +111,17 @@ struct AgentView: View {
         .padding(.bottom, 8)
     }
 
-    private var firstLaunchMessage: String {
-        if settings.corpusBookmarkData == nil {
-            return "Pick your Voice Agent folder (in iCloud Drive) and add your Anthropic key in Settings."
-        }
-        return "Using the on-device voice. Add a Breeze key and voice ID for a natural one."
-    }
-
     // MARK: - Controls
 
     private var controls: some View {
-        HStack(spacing: 12) {
-            Button(action: { viewModel.primaryButtonTapped() }) {
-                Text(primaryButtonLabel)
-                    .font(Theme.mono)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 44)
-            }
-            .buttonStyle(TerminalPrimaryButtonStyle())
-            .accessibilityLabel(primaryButtonAccessibilityLabel)
-
-            Button {
-                showingImporter = true
-            } label: {
-                Image(systemName: "plus")
-                    .frame(width: 44, height: 44)
-            }
-            .buttonStyle(TerminalSecondaryButtonStyle())
-            .accessibilityLabel("Add a document")
+        Button(action: { viewModel.primaryButtonTapped() }) {
+            Text(primaryButtonLabel)
+                .font(Theme.mono)
+                .frame(maxWidth: .infinity)
+                .frame(height: 44)
         }
+        .buttonStyle(TerminalPrimaryButtonStyle())
+        .accessibilityLabel(primaryButtonAccessibilityLabel)
     }
 
     private var primaryButtonLabel: String {

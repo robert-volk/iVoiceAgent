@@ -2,16 +2,12 @@ import SwiftUI
 
 /// The single settings surface in this app — not a screen, a sheet, reachable
 /// only from the first-launch note or a long-press on the header (see
-/// AgentView). Holds exactly three things: the Anthropic key (required —
-/// every answer is a Claude API call), the one-time iCloud folder pick, and
-/// the optional Breeze key + voice ID that upgrades the spoken voice.
+/// AgentView). Holds the Anthropic key (required — every answer is a Claude
+/// API call), the optional Breeze key + voice ID that upgrades the spoken
+/// voice, and a plain view of what's been learned so far, with the ability
+/// to forget any of it.
 struct SettingsSheet: View {
-    /// Called with the picked folder URL. The `.fileImporter` that produces
-    /// it lives on *this* view, not the presenter — a `.fileImporter`
-    /// attached to the view behind an already-presented `.sheet` can't
-    /// present its own modal (a sheet can't present a sheet from underneath
-    /// itself), so the folder picker has to be owned here.
-    let onPickFolder: (URL) -> Void
+    @ObservedObject var memory: MemoryStore
 
     @Environment(\.dismiss) private var dismiss
     @ObservedObject private var settings = AppSettings.shared
@@ -21,7 +17,6 @@ struct SettingsSheet: View {
     @State private var breezeVoiceID: String = AppSettings.shared.breezeVoiceID
     @State private var isValidatingBreeze = false
     @State private var breezeValidationMessage: String?
-    @State private var showingFolderPicker = false
 
     var body: some View {
         NavigationStack {
@@ -33,17 +28,7 @@ struct SettingsSheet: View {
                 } header: {
                     Text("Anthropic API key")
                 } footer: {
-                    Text("Required — every answer is a Claude API call. Stored in Keychain, never in source. Question text and retrieved excerpts are sent to Anthropic; see the README for the full picture of what leaves this device.")
-                }
-
-                Section {
-                    Button(action: { showingFolderPicker = true }) {
-                        Label(folderStatusText, systemImage: "folder")
-                    }
-                } header: {
-                    Text("Documents folder")
-                } footer: {
-                    Text("Pick (or create) a \"Voice Agent\" folder inside iCloud Drive in the Files app. Drop documents into that same folder on your PC via iCloud for Windows, and they'll show up here on your next rescan.")
+                    Text("Required — every answer is a Claude API call. Stored in Keychain, never in source. Question text and what's remembered about you are sent to Anthropic; see the README for the full picture of what leaves this device.")
                 }
 
                 Section {
@@ -65,6 +50,30 @@ struct SettingsSheet: View {
                 } footer: {
                     Text("Without both a key and a voice ID, Voice Agent speaks with the on-device voice — clearly synthetic, but free and works offline. A Breeze key and voice ID together sound far more natural. This is not the Claude voice-chat voice: Anthropic doesn't expose that voice, or any text-to-speech at all, through its API. Find your key and voice ID at breezeblue.ai — the key starts with \"brz_\", voice IDs with \"voc_\".")
                 }
+
+                Section {
+                    if memory.facts.isEmpty {
+                        Text("Nothing remembered yet — it learns as you talk.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(memory.facts) { fact in
+                            Text(fact.text)
+                        }
+                        .onDelete { indexSet in
+                            for index in indexSet {
+                                memory.forget(memory.facts[index].id)
+                            }
+                        }
+                        Button("Forget everything", role: .destructive) {
+                            memory.forgetEverything()
+                        }
+                    }
+                } header: {
+                    Text("What I remember")
+                } footer: {
+                    Text("Learned automatically from conversation and stored only on this device. Swipe to forget something specific.")
+                }
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -76,11 +85,6 @@ struct SettingsSheet: View {
                     }
                 }
             }
-            .fileImporter(isPresented: $showingFolderPicker, allowedContentTypes: [.folder]) { result in
-                if case .success(let url) = result {
-                    onPickFolder(url)
-                }
-            }
             // `.onDisappear` fires no matter how the sheet closes -- the
             // Done button, a swipe-down, or tapping outside. Saving only
             // from the Done button's action meant a swipe-to-dismiss (the
@@ -88,12 +92,6 @@ struct SettingsSheet: View {
             // everything typed, including a just-entered voice ID or key.
             .onDisappear { save() }
         }
-    }
-
-    private var folderStatusText: String {
-        settings.corpusBookmarkData != nil
-            ? "Voice Agent folder selected — tap to change"
-            : "Pick your Voice Agent folder"
     }
 
     private func validateBreezeKeyIfNeeded() {

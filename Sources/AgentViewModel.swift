@@ -23,21 +23,21 @@ struct TranscriptEntry: Identifiable, Equatable {
     }
 }
 
-/// Owns the turn loop described in the build spec:
-/// idle -> listening -> thinking -> answering(.folder/.web) -> idle,
+/// Owns the turn loop: idle -> listening -> thinking -> answering -> idle,
 /// with barge-in able to cut back from thinking/answering straight to
 /// listening at any point. This is the one place that wires
-/// DictationController, CorpusStore/Retriever, ClaudeClient, the
-/// VoiceProvider, and SourceTracker together — every other type in the app
-/// only knows about its own concern.
+/// DictationController, MemoryStore, ClaudeClient, the VoiceProvider, and
+/// SourceTracker together — every other type in the app only knows about
+/// its own concern.
 @MainActor
 final class AgentViewModel: ObservableObject {
     @Published private(set) var phase: AgentPhase = .idle
     @Published private(set) var transcript: [TranscriptEntry] = []
     @Published var errorMessage: String?
+    @Published private(set) var justRemembered: String?
 
     let dictation = DictationController()
-    let corpus = CorpusStore()
+    let memory = MemoryStore()
     let sourceTracker = SourceTracker()
 
     private var voiceProvider: VoiceProvider = VoiceProviderFactory.current()
@@ -61,19 +61,6 @@ final class AgentViewModel: ObservableObject {
 
     func onAppear() async {
         await dictation.requestPermissionsIfNeeded()
-        await corpus.rescan()
-    }
-
-    func onForeground() async {
-        await corpus.rescan()
-    }
-
-    func rescanFolder() async {
-        await corpus.rescan()
-    }
-
-    func importFile(_ url: URL) {
-        corpus.importFile(from: url)
     }
 
     // MARK: - Primary button
@@ -93,6 +80,7 @@ final class AgentViewModel: ObservableObject {
 
     private func startListening() {
         errorMessage = nil
+        justRemembered = nil
         phase = .listening
         announce("Listening")
         dictation.startListening()
@@ -137,9 +125,9 @@ final class AgentViewModel: ObservableObject {
         voiceProvider = VoiceProviderFactory.current()
         dictation.watchForBargeIn()
 
-        let excerpts = Retriever.topExcerpts(for: question, index: corpus.index)
         let client = ClaudeClient(apiKey: apiKey)
         let historySnapshot = history
+        let knownFacts = memory.factsForPrompt
 
         let agentEntry = TranscriptEntry(speaker: .agent, text: "", isComplete: false)
         transcript.append(agentEntry)
@@ -148,10 +136,9 @@ final class AgentViewModel: ObservableObject {
         currentStreamTask = Task { [weak self] in
             guard let self else { return }
             var sentenceBuffer = ""
-            var announcedFolder = false
 
             do {
-                for try await event in client.streamAnswer(history: historySnapshot, question: question, excerpts: excerpts) {
+                for try await event in client.streamAnswer(history: historySnapshot, question: question, knownFacts: knownFacts) {
                     try Task.checkCancellation()
                     self.sourceTracker.handle(event)
                     if self.phase == .thinking { self.phase = .answering }
@@ -162,12 +149,6 @@ final class AgentViewModel: ObservableObject {
 
                     case .webSearchResults:
                         break  // SourceTracker already recorded these for the expanded chip.
-
-                    case .citation:
-                        if !announcedFolder {
-                            announcedFolder = true
-                            self.announce("Answering from your folder")
-                        }
 
                     case .textDelta(let delta):
                         self.appendToTranscript(id: agentEntryID, delta: delta)
@@ -191,7 +172,7 @@ final class AgentViewModel: ObservableObject {
                     }
                 }
 
-                self.finishTurn(agentEntryID: agentEntryID, question: question)
+                self.finishTurn(agentEntryID: agentEntryID, question: question, apiKey: apiKey)
             } catch is CancellationError {
                 // Barge-in or a manual Stop already handled the phase change.
             } catch {
@@ -209,16 +190,31 @@ final class AgentViewModel: ObservableObject {
         }
     }
 
-    private func finishTurn(agentEntryID: UUID, question: String) {
+    private func finishTurn(agentEntryID: UUID, question: String, apiKey: String) {
         finishTranscriptEntry(id: agentEntryID)
+        let finalAnswer = transcript.first(where: { $0.id == agentEntryID })?.text ?? ""
         history.append(ConversationTurn(role: .user, text: question))
-        if let finalText = transcript.first(where: { $0.id == agentEntryID })?.text {
-            history.append(ConversationTurn(role: .assistant, text: finalText))
-        }
+        history.append(ConversationTurn(role: .assistant, text: finalAnswer))
         trimHistoryAndTranscript()
         dictation.stopWatchingForBargeIn()
         currentStreamTask = nil
         phase = .idle
+
+        // Learning what to remember happens in the background, after the
+        // spoken answer is already finished — never delays anything the
+        // user hears. A separate, cheap, tool-free call rather than a
+        // client-side tool the model invokes mid-stream, to keep the main
+        // streaming path's failure modes limited to what's already been
+        // hardened there.
+        let knownFacts = memory.factsForPrompt
+        Task { [weak self] in
+            guard let self else { return }
+            let extractor = ClaudeClient(apiKey: apiKey)
+            if let fact = try? await extractor.extractFact(question: question, answer: finalAnswer, knownFacts: knownFacts) {
+                self.memory.remember(fact)
+                self.justRemembered = fact
+            }
+        }
     }
 
     // MARK: - Transcript helpers
