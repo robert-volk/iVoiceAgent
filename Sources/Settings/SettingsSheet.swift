@@ -3,7 +3,7 @@ import SwiftUI
 /// The single settings surface in this app — not a screen, a sheet, reachable
 /// only from the first-launch note or a long-press on the header (see
 /// AgentView). Holds exactly three things: the Anthropic key (required —
-/// every answer is a Claude API call), the one-time Drive folder pick, and
+/// every answer is a Claude API call), the one-time iCloud folder pick, and
 /// the optional ElevenLabs key + voice ID that upgrades the spoken voice.
 struct SettingsSheet: View {
     /// Called with the picked folder URL. The `.fileImporter` that produces
@@ -43,7 +43,7 @@ struct SettingsSheet: View {
                 } header: {
                     Text("Documents folder")
                 } footer: {
-                    Text("Pick the \"Voice Agent\" folder inside Google Drive in the Files app. Drop documents into that same folder on your PC via Google Drive for desktop, and they'll show up here on your next rescan.")
+                    Text("Pick (or create) a \"Voice Agent\" folder inside iCloud Drive in the Files app. Drop documents into that same folder on your PC via iCloud for Windows, and they'll show up here on your next rescan.")
                 }
 
                 Section {

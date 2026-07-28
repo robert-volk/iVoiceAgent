@@ -137,7 +137,7 @@ struct AgentView: View {
 
     private var firstLaunchMessage: String {
         if settings.corpusBookmarkData == nil {
-            return "Pick your Voice Agent folder (in Drive) and add your Anthropic key in Settings."
+            return "Pick your Voice Agent folder (in iCloud Drive) and add your Anthropic key in Settings."
         }
         return "Using the on-device voice. Add an ElevenLabs key for a natural one."
     }

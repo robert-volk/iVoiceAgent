@@ -27,7 +27,7 @@ voice" — so this app doesn't pretend to. It ships two voices behind one `Voice
 ### This app is not fully local
 
 Every answer is a Claude API call (`claude-opus-5`). Speech-to-text stays entirely on-device, and
-your documents live in your own Google Drive (or the local sandbox fallback) — but **the question
+your documents live in your own iCloud Drive (or the local sandbox fallback) — but **the question
 text and the retrieved excerpts from your documents are sent to Anthropic** on every turn, and
 **web search queries leave the device** whenever the agent decides your folder doesn't have the
 answer. There's a one-line version of this on first launch; this is the full version.
@@ -40,7 +40,7 @@ You need, in order:
 
 1. **An Anthropic API key** — get one at [console.anthropic.com](https://console.anthropic.com).
    Required; nothing works without it.
-2. **A documents folder, bridged through Google Drive** (see below) — optional in the sense that the
+2. **A documents folder, bridged through iCloud Drive** (see below) — optional in the sense that the
    app runs without it (falling back to an empty local folder), but the whole point of the app is
    moot without it.
 3. **An ElevenLabs API key** (optional) — get one at [elevenlabs.io](https://elevenlabs.io) if you
@@ -49,42 +49,47 @@ You need, in order:
 All three are entered in the same place: **Settings**, opened by long-pressing the header or
 tapping the note under the controls on first launch.
 
-### The Google Drive folder bridge (Windows ↔ iPhone, no Mac needed)
+### The iCloud Drive folder bridge (Windows ↔ iPhone, no Mac needed)
 
 The developer's PC is Windows, and iOS has no way to read a Windows folder directly. The bridge is
-Google Drive, which both ends already understand:
+iCloud Drive — built into iOS already, and reachable from Windows via Apple's own desktop client:
 
-1. **On your PC**, install [Google Drive for desktop](https://www.google.com/drive/download/) if
-   you don't have it, sign in, and create a folder named **`Voice Agent`** somewhere inside your
-   Drive (e.g. `Google Drive/My Drive/Voice Agent`). Drop your documents in there — PDFs, `.txt`,
-   `.md`, `.csv`, `.rtf` are all read. (`.docx` isn't supported — iOS has no built-in OOXML reader,
-   and reading one by hand would mean unzipping the file and parsing its XML, which needs a real
-   archive library. Save Word docs as `.rtf` or `.txt` instead.)
-2. **On your iPhone**, make sure the **Google Drive app** is installed and signed in (this is what
-   registers Drive as a location the Files app can browse — you don't need to open the Drive app
-   itself day-to-day, just have it installed and signed in once).
-3. **In Voice Agent**, open Settings and tap **"Pick your Voice Agent folder."** This opens the
-   system Files picker — navigate to **Google Drive → Voice Agent** (the same folder from step 1)
-   and select it. The app remembers this folder from then on (a security-scoped bookmark, not a
-   copy) — you won't need to pick it again unless you reinstall.
+1. **On your PC**, install [iCloud for Windows](https://support.apple.com/HT204283) if you don't
+   have it, sign in with the same Apple ID you use on your iPhone, and make sure **iCloud Drive**
+   is turned on in its settings. Then create a folder named **`Voice Agent`** somewhere inside the
+   **iCloud Drive** folder that appears in File Explorer. Drop your documents in there — PDFs,
+   `.txt`, `.md`, `.csv`, `.rtf` are all read. (`.docx` isn't supported — iOS has no built-in OOXML
+   reader, and reading one by hand would mean unzipping the file and parsing its XML, which needs a
+   real archive library. Save Word docs as `.rtf` or `.txt` instead.)
+2. **On your iPhone**, confirm iCloud Drive is on: **Settings → [your name] → iCloud → iCloud
+   Drive**. Nothing else to install — unlike a third-party provider, iCloud Drive is already a
+   location the Files app can browse on every iPhone signed into an Apple ID.
+3. **In Voice Agent**, open Settings and tap **"Pick (or create) your Voice Agent folder."** This
+   opens the system Files picker — navigate to **iCloud Drive → Voice Agent** (the same folder from
+   step 1) and select it. The app remembers this folder from then on (a security-scoped bookmark,
+   not a copy) — you won't need to pick it again unless you reinstall.
 4. From then on, drop a new file into that folder on your PC, and it'll show up in the app's index
    the next time you **foreground the app or tap the header to rescan**. There's no instant live
-   sync — Google Drive's iOS integration doesn't reliably push change notifications to a
-   third-party app in real time, so a rescan is the trigger rather than something automatic firing
-   the moment a file lands.
-5. The **`+`** button on the main screen does the reverse: pick a file on your phone, and it gets
-   copied into the same Drive folder, syncing back to your PC.
+   sync — a rescan is the trigger rather than something automatic firing the moment a file lands.
+5. A freshly-synced file can briefly exist as a cloud-only placeholder (the small cloud icon you
+   sometimes see in Files) before iOS has actually downloaded it to the phone. The app now detects
+   this, kicks off the download itself, and — instead of silently skipping the file or miscounting
+   it as indexed — shows a note like `filename.pdf (still downloading from iCloud — try again
+   shortly)` above the source chip. Rescan a few seconds later and it'll pick it up normally.
+6. The **`+`** button on the main screen does the reverse: pick a file on your phone, and it gets
+   copied into the same iCloud folder, syncing back to your PC.
 
-**The honest tradeoff:** this means Voice Agent needs a Google account and your documents pass
-through Google's sync infrastructure — unlike the fully local, no-account default in this
-developer's other apps. That's the price of a folder that's genuinely live on both a Windows PC
-and an iPhone without a Mac in the loop. The app itself still creates no account of its own and
-never sees your Google credentials — it only reads a folder the OS's Files app already has access
-to, via a standard document picker and a security-scoped bookmark.
+**The honest tradeoff:** your documents pass through Apple's iCloud sync infrastructure rather than
+staying fully local, which is the price of a folder that's genuinely live on both a Windows PC and
+an iPhone without a Mac in the loop. Unlike the earlier Google Drive version of this bridge, though,
+this needs no new account at all — you already have the Apple ID this uses, from AltStore signing
+the app in the first place. The app itself still creates no account of its own — it only reads a
+folder the OS's Files app already has access to, via a standard document picker and a
+security-scoped bookmark.
 
 If you skip the folder pick entirely, the app uses an empty local folder in its own sandbox
 instead (also reachable via the Files app, since file sharing is enabled) — everything still runs,
-there's just nothing to be grounded in until you either pick the Drive folder or use **`+`** to add
+there's just nothing to be grounded in until you either pick the iCloud folder or use **`+`** to add
 files locally.
 
 ---
@@ -158,7 +163,7 @@ Sources/
   Components/                   TranscriptView, SourceChipView, CaretView, LevelMeterView, button styles
   Speech/                        DictationController (STT + barge-in watch), VoiceProvider + two
                                  implementations, AudioSession
-  Corpus/                       CorpusStore (Drive bookmark + scanning), TextExtractor, Chunker,
+  Corpus/                       CorpusStore (iCloud bookmark + scanning), TextExtractor, Chunker,
                                  EmbeddingIndex, Retriever
   Agent/                        ClaudeClient (raw SSE streaming), SystemPrompt, SourceTracker
   Storage/                      Keychain (API keys), AppSettings (small non-secret prefs)
@@ -169,7 +174,7 @@ Sources/
 
 - **Speech-to-text**: on-device (`SFSpeechRecognizer`, on-device recognition where the locale
   supports it). Nothing sent anywhere for this step.
-- **Your documents**: live in your own Google Drive (or a local sandbox folder). Only the
+- **Your documents**: live in your own iCloud Drive (or a local sandbox folder). Only the
   retrieved excerpts relevant to a given question are sent to Anthropic with that question — never
   whole documents, never your whole folder.
 - **Every answer**: a call to the Claude API. Question text + retrieved excerpts leave the device.

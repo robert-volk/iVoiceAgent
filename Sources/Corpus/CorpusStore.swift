@@ -1,17 +1,16 @@
 import Foundation
 
 /// Owns the folder this app treats as ground truth: a security-scoped
-/// bookmark to a Google Drive folder the user picked via the Files app, or —
+/// bookmark to an iCloud Drive folder the user picked via the Files app, or —
 /// until they've picked one — a local sandbox fallback folder.
 ///
 /// Re-indexing is triggered from three places, not a live file watcher:
 /// launch, the app returning to the foreground, and a manual tap on the
-/// header. A real `NSFilePresenter` was deliberately left out — third-party
-/// File Provider extensions (Google Drive's included) don't reliably deliver
-/// presenter change notifications across process boundaries, so one would
-/// give a false sense of live-ness without actually being dependable. The
-/// three explicit triggers above are what's actually promised in the
-/// README and the acceptance checklist.
+/// header. A real `NSFilePresenter`/`NSMetadataQuery` live watcher was
+/// deliberately left out to keep the app's promised behavior simple and
+/// exactly matched by the README and the acceptance checklist — the three
+/// explicit triggers above are what's actually guaranteed, rather than a
+/// "should usually update live" feeling that's harder to pin down.
 @MainActor
 final class CorpusStore: ObservableObject {
     @Published private(set) var indexedDocumentCount = 0
@@ -34,7 +33,7 @@ final class CorpusStore: ObservableObject {
     }()
 
     init() {
-        folderLabel = settings.corpusBookmarkData != nil ? "Voice Agent (Drive)" : "Voice Agent (local)"
+        folderLabel = settings.corpusBookmarkData != nil ? "Voice Agent (iCloud)" : "Voice Agent (local)"
     }
 
     // MARK: - Folder selection
@@ -51,7 +50,7 @@ final class CorpusStore: ObservableObject {
         do {
             let bookmark = try url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
             settings.corpusBookmarkData = bookmark
-            folderLabel = "Voice Agent (Drive)"
+            folderLabel = "Voice Agent (iCloud)"
             Task { await rescan() }
         } catch {
             lastError = "Couldn't remember that folder: \(error.localizedDescription)"
@@ -84,7 +83,7 @@ final class CorpusStore: ObservableObject {
     // MARK: - Import
 
     /// Copies a phone-picked file into the active folder, then re-indexes —
-    /// the mirror of dragging a file into the Drive folder on the PC.
+    /// the mirror of dragging a file into the iCloud folder on the PC.
     func importFile(from sourceURL: URL) {
         let didAccessSource = sourceURL.startAccessingSecurityScopedResource()
         defer { if didAccessSource { sourceURL.stopAccessingSecurityScopedResource() } }
@@ -110,7 +109,7 @@ final class CorpusStore: ObservableObject {
         isIndexing = true
         defer { isIndexing = false }
 
-        folderLabel = settings.corpusBookmarkData != nil ? "Voice Agent (Drive)" : "Voice Agent (local)"
+        folderLabel = settings.corpusBookmarkData != nil ? "Voice Agent (iCloud)" : "Voice Agent (local)"
         lastError = nil
 
         let files: [URL] = withFolderAccess { folder in
@@ -128,6 +127,16 @@ final class CorpusStore: ObservableObject {
         for fileURL in supportedFiles {
             let filename = fileURL.lastPathComponent
             seenFilenames.insert(filename)
+
+            // iCloud Drive files can exist as cloud-only placeholders (the
+            // familiar cloud-with-arrow icon in Files) until something asks
+            // for them. This resource key is simply absent for local files
+            // and other providers, so the same loop serves every folder
+            // without branching on which one is active.
+            if let downloadNote = Self.startDownloadIfNeeded(fileURL) {
+                failures.append(downloadNote)
+                continue
+            }
 
             guard let signature = Self.signature(for: fileURL) else { continue }
             if fileSignatures[filename] == signature { continue }  // unchanged since last scan
@@ -161,6 +170,19 @@ final class CorpusStore: ObservableObject {
         if !failures.isEmpty {
             lastError = "Couldn't read: " + failures.joined(separator: "; ")
         }
+    }
+
+    /// Returns a note (and kicks off the download) if `url` is an
+    /// iCloud-only placeholder not yet materialized on this device;
+    /// returns nil — proceed normally — for anything already local,
+    /// which is every non-iCloud provider and any already-downloaded
+    /// iCloud file.
+    private static func startDownloadIfNeeded(_ url: URL) -> String? {
+        guard let status = try? url.resourceValues(forKeys: [.ubiquitousItemDownloadingStatusKey])
+            .ubiquitousItemDownloadingStatus, status != .current
+        else { return nil }
+        try? FileManager.default.startDownloadingUbiquitousItem(at: url)
+        return "\(url.lastPathComponent) (still downloading from iCloud — try again shortly)"
     }
 
     private static func signature(for url: URL) -> String? {

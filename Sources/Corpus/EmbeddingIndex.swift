@@ -14,11 +14,11 @@ struct IndexedChunk: Codable {
 /// relaunch doesn't have to re-embed unchanged documents.
 ///
 /// Deliberately stored in the app's own Application Support directory, not
-/// "beside the corpus" in the Drive-bookmarked folder: writing our own
-/// artifact into the user's synced folder would itself sync back through
-/// Google Drive as a stray file, and would need its own write-access
-/// bookkeeping on top of what CorpusStore already does for the documents
-/// themselves. Keeping the index purely local avoids both.
+/// "beside the corpus" in the bookmarked folder: writing our own artifact
+/// into the user's synced folder would itself sync back through iCloud
+/// Drive as a stray file, and would need its own write-access bookkeeping
+/// on top of what CorpusStore already does for the documents themselves.
+/// Keeping the index purely local avoids both.
 @MainActor
 final class EmbeddingIndex {
     private(set) var chunks: [IndexedChunk] = []
