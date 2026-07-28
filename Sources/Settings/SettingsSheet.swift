@@ -81,6 +81,12 @@ struct SettingsSheet: View {
                     onPickFolder(url)
                 }
             }
+            // `.onDisappear` fires no matter how the sheet closes -- the
+            // Done button, a swipe-down, or tapping outside. Saving only
+            // from the Done button's action meant a swipe-to-dismiss (the
+            // default, natural gesture for a sheet) silently discarded
+            // everything typed, including a just-entered voice ID or key.
+            .onDisappear { save() }
         }
     }
 

@@ -40,6 +40,11 @@ jobs:
       - name: Build (unsigned)
         run: |
           set -o pipefail
+          # CURRENT_PROJECT_VERSION overridden to the run number so every
+          # build is genuinely distinct -- project.yml's checked-in value
+          # never changes, and a static build number across sideload
+          # updates is a known trigger for iOS/AltStore to keep serving a
+          # cached app icon instead of picking up a new one.
           xcodebuild \
             -project VoiceAgent.xcodeproj \
             -scheme VoiceAgent \
@@ -50,6 +55,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
             clean build
 
       - name: Package unsigned IPA
