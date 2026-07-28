@@ -67,9 +67,17 @@ final class CorpusStore: ObservableObject {
         var isStale = false
         guard let url = try? URL(resolvingBookmarkData: bookmarkData, options: [],
                                   relativeTo: nil, bookmarkDataIsStale: &isStale) else {
+            // A bookmark existed but no longer resolves. Previously this
+            // silently fell back to the empty local folder -- Settings
+            // would still say "folder selected" (it only checks whether
+            // bookmark *data* exists, not whether it resolves), and
+            // rescan() would report 0 docs with no error anywhere,
+            // indistinguishable from "the folder is genuinely empty."
+            lastError = "Couldn't reach your iCloud folder — re-pick it in Settings."
             return try body(localFallbackFolder)
         }
         guard url.startAccessingSecurityScopedResource() else {
+            lastError = "Couldn't access your iCloud folder — re-pick it in Settings."
             return try body(localFallbackFolder)
         }
         defer { url.stopAccessingSecurityScopedResource() }
