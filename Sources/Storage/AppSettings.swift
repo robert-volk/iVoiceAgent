@@ -16,10 +16,10 @@ final class AppSettings: ObservableObject {
         static let elevenLabsVoiceID = "elevenLabsVoiceID"
     }
 
-    /// "Bella" — a warm, mid-pitch, conversational ElevenLabs premade voice.
-    /// This is a starting point, not a claim of matching any particular
-    /// product's voice — see VoiceProvider.swift and the README for why.
-    static let defaultElevenLabsVoiceID = "EXAVITQu4vr4xnSDxMaL"
+    /// "Breeze Blue" — Robert's chosen ElevenLabs voice for the agent. Not a
+    /// claim of matching any particular product's voice — see
+    /// VoiceProvider.swift and the README for why.
+    static let defaultElevenLabsVoiceID = "brz_mDQBUuJ_P2R8xaDKwiVdQ8M0xJhGkasp"
 
     @Published var hasSeenFirstLaunch: Bool {
         didSet { UserDefaults.standard.set(hasSeenFirstLaunch, forKey: Keys.hasSeenFirstLaunch) }
