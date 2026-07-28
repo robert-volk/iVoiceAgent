@@ -1,6 +1,7 @@
 import Foundation
 import PDFKit
 import UIKit
+import Vision
 import UniformTypeIdentifiers
 
 /// One page (or, for formats with no page concept, the whole document) of
@@ -71,13 +72,45 @@ enum TextExtractor {
         var pages: [ExtractedPage] = []
         for index in 0..<document.pageCount {
             guard let page = document.page(at: index) else { continue }
-            let text = page.string ?? ""
+            var text = page.string ?? ""
+            // No embedded text layer at all -- typical of a scanner/camera-
+            // scan app's output rather than something exported from a word
+            // processor. Fall back to on-device OCR instead of just
+            // dropping the page; confirmed via testing that a real,
+            // personal document folder can be entirely made of these.
+            if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                text = ocrText(for: page) ?? ""
+            }
             if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 pages.append(ExtractedPage(pageNumber: index + 1, text: text))
             }
         }
         guard !pages.isEmpty else { throw TextExtractorError.unreadable }
         return ExtractedDocument(filename: filename, pages: pages)
+    }
+
+    /// Renders a page to an image and runs on-device Vision text
+    /// recognition on it -- no network, no cost, same privacy story as
+    /// everything else in this app. `.accurate` over `.fast` because this
+    /// runs once per document at indexing time, not on every question;
+    /// correctness matters more than the extra latency here.
+    private static func ocrText(for page: PDFPage) -> String? {
+        let pageBounds = page.bounds(for: .mediaBox)
+        guard pageBounds.width > 0, pageBounds.height > 0 else { return nil }
+
+        let scale: CGFloat = 2
+        let targetSize = CGSize(width: pageBounds.width * scale, height: pageBounds.height * scale)
+        guard let cgImage = page.thumbnail(of: targetSize, for: .mediaBox).cgImage else { return nil }
+
+        let request = VNRecognizeTextRequest()
+        request.recognitionLevel = .accurate
+        request.usesLanguageCorrection = true
+
+        let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+        guard (try? handler.perform([request])) != nil else { return nil }
+
+        let lines = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
+        return lines.isEmpty ? nil : lines.joined(separator: "\n")
     }
 
     private static func extractPlainText(_ url: URL, filename: String) throws -> ExtractedDocument {

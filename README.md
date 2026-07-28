@@ -60,9 +60,12 @@ iCloud Drive — built into iOS already, and reachable from Windows via Apple's 
    have it, sign in with the same Apple ID you use on your iPhone, and make sure **iCloud Drive**
    is turned on in its settings. Then create a folder named **`Voice Agent`** somewhere inside the
    **iCloud Drive** folder that appears in File Explorer. Drop your documents in there — PDFs,
-   `.txt`, `.md`, `.csv`, `.rtf` are all read. (`.docx` isn't supported — iOS has no built-in OOXML
-   reader, and reading one by hand would mean unzipping the file and parsing its XML, which needs a
-   real archive library. Save Word docs as `.rtf` or `.txt` instead.)
+   `.txt`, `.md`, `.csv`, `.rtf` are all read. Scanned/image-only PDFs (no embedded text layer —
+   common output from a scanner or camera-scan app) are handled too, via on-device OCR
+   (`Vision`/`VNRecognizeTextRequest`) — no network, no cost, same on-device story as speech-to-text.
+   (`.docx` isn't supported — iOS has no built-in OOXML reader, and reading one by hand would mean
+   unzipping the file and parsing its XML, which needs a real archive library. Save Word docs as
+   `.rtf` or `.txt` instead.)
 2. **On your iPhone**, confirm iCloud Drive is on: **Settings → [your name] → iCloud → iCloud
    Drive**. Nothing else to install — unlike a third-party provider, iCloud Drive is already a
    location the Files app can browse on every iPhone signed into an Apple ID.
