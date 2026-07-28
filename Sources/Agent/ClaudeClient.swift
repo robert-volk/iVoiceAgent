@@ -134,8 +134,6 @@ final class ClaudeClient {
         let body: [String: Any] = [
             "model": Self.model,
             "max_tokens": 100,
-            "thinking": ["type": "adaptive"],
-            "output_config": ["effort": "low"],
             "messages": [["role": "user", "content": prompt]]
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -169,8 +167,6 @@ final class ClaudeClient {
             "max_tokens": 1024,
             "stream": true,
             "system": SystemPrompt.text(knownFacts: knownFacts),
-            "thinking": ["type": "adaptive"],
-            "output_config": ["effort": "low"],
             "tools": [["type": "web_search_20260209", "name": "web_search"]],
             "messages": messages
         ]
@@ -265,12 +261,15 @@ final class ClaudeClient {
 /// `web_search_tool_result`) arrive fully-formed at `content_block_start`
 /// with no deltas, so they fall through `finalized()` unchanged.
 ///
-/// Best-effort for `thinking` blocks specifically: with `display: "omitted"`
-/// (the default this app uses — see ClaudeClient's request body) the
-/// `thinking` text is empty and no exotic signature reconstruction should be
-/// needed, but this hasn't been exercised against a live `pause_turn` in
-/// testing (that path requires the model to hit its own internal 10-round
-/// server-tool iteration limit, which a single web search per turn rarely
+/// Best-effort for `thinking` blocks specifically: the current model
+/// (claude-haiku-4-5) doesn't support the `thinking` parameter at all --
+/// confirmed by a real 400 ("adaptive thinking is not supported on this
+/// model") when it was still set for the prior claude-opus-5 -- so this
+/// path is currently dead in practice, kept only in case a future model
+/// swap brings thinking back. It hasn't been exercised against a live
+/// `pause_turn` in testing (that path requires the model to hit its own
+/// internal 10-round server-tool iteration limit, which a single web
+/// search per turn rarely
 /// does). If a continuation ever 400s, ClaudeClient surfaces it as a normal
 /// thrown error rather than silently retrying — see AgentViewModel's
 /// handling of stream errors.
