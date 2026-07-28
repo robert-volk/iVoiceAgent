@@ -96,17 +96,24 @@ final class CorpusStore: ObservableObject {
         let didAccessSource = sourceURL.startAccessingSecurityScopedResource()
         defer { if didAccessSource { sourceURL.stopAccessingSecurityScopedResource() } }
 
-        withFolderAccess { folder in
+        let copySucceeded: Bool = withFolderAccess { folder in
             let destination = folder.appendingPathComponent(sourceURL.lastPathComponent)
             do {
                 if FileManager.default.fileExists(atPath: destination.path) {
                     try FileManager.default.removeItem(at: destination)
                 }
                 try FileManager.default.copyItem(at: sourceURL, to: destination)
+                return true
             } catch {
                 lastError = "Couldn't import \(sourceURL.lastPathComponent): \(error.localizedDescription)"
+                return false
             }
         }
+        // A copy failure's error would otherwise be overwritten almost
+        // immediately by rescan()'s unconditional `lastError = nil` reset
+        // -- confirmed by testing ("the error flashes too fast"). Only
+        // rescan when there's actually something new for it to find.
+        guard copySucceeded else { return }
         Task { await rescan() }
     }
 
