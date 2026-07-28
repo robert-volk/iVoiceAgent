@@ -139,11 +139,17 @@ final class ClaudeClient {
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else { return nil }
+        guard let http = response as? HTTPURLResponse else { throw ClaudeClientError.badResponse }
+        guard (200..<300).contains(http.statusCode) else {
+            let message = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])
+                .flatMap { ($0["error"] as? [String: Any])?["message"] as? String }
+                ?? "HTTP \(http.statusCode)"
+            throw ClaudeClientError.api(http.statusCode, message)
+        }
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let content = json["content"] as? [[String: Any]],
               let firstText = content.first(where: { ($0["type"] as? String) == "text" })?["text"] as? String
-        else { return nil }
+        else { throw ClaudeClientError.badResponse }
 
         let trimmed = firstText.trimmingCharacters(in: .whitespacesAndNewlines)
         return (trimmed.isEmpty || trimmed.uppercased() == "NONE") ? nil : trimmed

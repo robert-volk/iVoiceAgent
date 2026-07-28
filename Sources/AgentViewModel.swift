@@ -241,9 +241,17 @@ final class AgentViewModel: ObservableObject {
         Task { [weak self] in
             guard let self else { return }
             let extractor = ClaudeClient(apiKey: apiKey)
-            if let fact = try? await extractor.extractFact(question: question, answer: finalAnswer, knownFacts: knownFacts) {
-                self.memory.remember(fact)
-                self.justRemembered = fact
+            do {
+                if let fact = try await extractor.extractFact(question: question, answer: finalAnswer, knownFacts: knownFacts) {
+                    self.memory.remember(fact)
+                    self.justRemembered = fact
+                }
+            } catch {
+                // Previously swallowed via `try?` -- surfaced now since a
+                // silent failure here is indistinguishable from "nothing
+                // was worth remembering," which made a real bug in this
+                // path impossible to tell apart from normal behavior.
+                self.errorMessage = "Couldn't save that: \(error.localizedDescription)"
             }
         }
     }
