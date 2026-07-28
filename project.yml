@@ -34,27 +34,17 @@ targets:
       - path: Sources
     resources:
       - path: Resources/Assets.xcassets
-      # Loose app-icon PNGs, referenced by CFBundleIconFiles in Info.plist,
-      # which only looks at the bundle's top level -- it does not search
-      # subdirectories. Listed individually rather than as
-      # `path: Resources/AppIcons` on purpose: XcodeGen's default for a
-      # bare folder path is a folder REFERENCE (blue folder), which
-      # preserves the subfolder structure when copied, landing these at
-      # VoiceAgent.app/AppIcons/AppIcon60x60@3x.png instead of
-      # VoiceAgent.app/AppIcon60x60@3x.png -- invisible to
-      # CFBundleIconFiles either way, which is almost certainly why the
-      # home-screen icon never changed on any build, regardless of what
-      # was actually drawn. Individual file entries always copy to the
-      # bundle root, sidestepping the folder-reference-vs-group ambiguity
-      # entirely.
-      - path: Resources/AppIcons/AppIcon20x20@2x.png
-      - path: Resources/AppIcons/AppIcon20x20@3x.png
-      - path: Resources/AppIcons/AppIcon29x29@2x.png
-      - path: Resources/AppIcons/AppIcon29x29@3x.png
-      - path: Resources/AppIcons/AppIcon40x40@2x.png
-      - path: Resources/AppIcons/AppIcon40x40@3x.png
-      - path: Resources/AppIcons/AppIcon60x60@2x.png
-      - path: Resources/AppIcons/AppIcon60x60@3x.png
+      # App-icon PNGs are deliberately NOT declared as XcodeGen resources
+      # here. CFBundleIconFiles (Info.plist) needs them at the bundle's
+      # top level, but neither a bare folder path (a folder REFERENCE,
+      # which preserves subfolder structure on copy) nor listing each
+      # file individually actually landed them there in practice -- two
+      # attempts, two failures, confirmed by CI's own verification step.
+      # Rather than keep guessing at XcodeGen/Xcode resource-declaration
+      # syntax with no way to compile-test locally, the CI workflow copies
+      # these PNGs directly into the built .app with a plain `cp` after
+      # xcodebuild finishes -- see ios-build.yml, which has zero ambiguity
+      # about where they end up.
     # Use our hand-maintained Info.plist verbatim. Do NOT use XcodeGen's `info:`
     # directive here — it regenerates (overwrites) the file and strips custom
     # keys like NSMicrophoneUsageDescription, which makes iOS crash on mic access.
