@@ -35,6 +35,12 @@ final class SystemVoice: NSObject, VoiceProvider {
             speechUtterance.voice = Self.preferredVoice()
             speechUtterance.rate = AVSpeechUtteranceDefaultSpeechRate
             speechUtterance.pitchMultiplier = 1.0
+            // Explicit rather than relying on the (already 1.0) default --
+            // 1.0 is this API's ceiling; it can't go louder than that from
+            // here. If this still isn't loud enough, the remaining lever is
+            // the phone's own physical media volume, which apps can't
+            // override.
+            speechUtterance.volume = 1.0
             synthesizer.speak(speechUtterance)
         }
     }

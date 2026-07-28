@@ -104,6 +104,12 @@ final class BreezeVoice: NSObject, VoiceProvider {
             do {
                 let newPlayer = try AVAudioPlayer(data: data)
                 newPlayer.delegate = self
+                // Explicit rather than relying on the (already 1.0)
+                // default -- 1.0 is this API's ceiling, it can't go
+                // louder than that from here. If this still isn't loud
+                // enough, the remaining lever is the phone's own physical
+                // media volume, which apps can't override.
+                newPlayer.volume = 1.0
                 pendingContinuation = continuation
                 player = newPlayer
                 newPlayer.play()

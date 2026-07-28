@@ -30,7 +30,7 @@ struct AgentView: View {
             TranscriptView(
                 entries: viewModel.transcript,
                 partialTranscript: dictation.partialTranscript,
-                isListening: viewModel.phase == .listening,
+                isListening: viewModel.phase == .listening || viewModel.phase == .recordingMemory,
                 inputLevel: dictation.inputLevel
             )
             .frame(maxHeight: .infinity)

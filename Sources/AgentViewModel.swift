@@ -6,6 +6,12 @@ enum AgentPhase: Equatable {
     case listening
     case thinking
     case answering
+    /// Actively taking dictation for an explicit "remember this ... stop"
+    /// request -- distinct from a normal conversational turn: nothing gets
+    /// sent to Claude while in this phase, everything said just accumulates
+    /// into a fact saved verbatim once "stop" is heard. See
+    /// AgentViewModel.beginRecordingMemory.
+    case recordingMemory
 }
 
 struct TranscriptEntry: Identifiable, Equatable {
@@ -48,6 +54,10 @@ final class AgentViewModel: ObservableObject {
     /// `Task { ... }` isn't automatically cancelled just because the
     /// enclosing `currentStreamTask` is. See `speak(_:)`.
     private var pendingPrepareTasks: [Task<VoiceUtterance, Error>] = []
+    /// Accumulates what's said between hearing "remember this" and "stop" —
+    /// joined into one fact and saved verbatim once recording finishes. See
+    /// beginRecordingMemory/continueRecordingMemory/finishRecordingMemory.
+    private var memoryDictationBuffer: [String] = []
 
     /// "Last ~10 turns" — a turn is a user+agent pair, so this caps the
     /// transcript at 20 entries and the model's own history at the same.
@@ -76,6 +86,16 @@ final class AgentViewModel: ObservableObject {
             startListening()
         case .listening:
             dictation.stopListeningManually()
+        case .recordingMemory:
+            // A manual tap here is a harder "get me out of this" signal
+            // than saying "stop" -- it discards whatever's been dictated
+            // so far rather than saving it. `phase` is reset to `.idle`
+            // *before* stopping the recognizer so that if it delivers one
+            // last partial fragment, `handleEndpoint` won't treat it as
+            // more memory content to append.
+            phase = .idle
+            memoryDictationBuffer = []
+            dictation.stopListeningManually()
         case .thinking, .answering:
             stopAnswering(returnToIdle: true)
         }
@@ -97,8 +117,115 @@ final class AgentViewModel: ObservableObject {
             phase = .idle
             return
         }
+
+        if phase == .recordingMemory {
+            continueRecordingMemory(trimmed)
+            return
+        }
+
+        if let remainder = Self.stripRememberTrigger(trimmed) {
+            beginRecordingMemory(initialContent: remainder)
+            return
+        }
+
         transcript.append(TranscriptEntry(speaker: .user, text: trimmed))
         beginAnswering(question: trimmed)
+    }
+
+    // MARK: - "Remember this" / "stop" dictation
+
+    /// Called the moment "remember this" is heard, whether alone or as a
+    /// prefix on the same breath as content ("Remember this, my wifi
+    /// password is starfish7"). `initialContent` is whatever followed the
+    /// trigger in that same utterance -- often empty, since people
+    /// naturally pause after a cue phrase like this.
+    private func beginRecordingMemory(initialContent: String) {
+        memoryDictationBuffer = []
+
+        // The whole thing, including "stop", said in one breath.
+        if let remainder = Self.stripStopTrigger(initialContent) {
+            if !remainder.isEmpty {
+                transcript.append(TranscriptEntry(speaker: .user, text: remainder))
+                memoryDictationBuffer.append(remainder)
+            }
+            finishRecordingMemory()
+            return
+        }
+
+        if !initialContent.isEmpty {
+            transcript.append(TranscriptEntry(speaker: .user, text: initialContent))
+            memoryDictationBuffer.append(initialContent)
+        }
+
+        announce("Recording a memory")
+        let prompt = "Okay, recording — say \"stop\" when you're done."
+        Task { [weak self] in
+            guard let self else { return }
+            self.transcript.append(TranscriptEntry(speaker: .agent, text: prompt))
+            try? await self.speak([prompt])
+            self.phase = .recordingMemory
+            self.dictation.startListening()
+        }
+    }
+
+    private func continueRecordingMemory(_ text: String) {
+        if let remainder = Self.stripStopTrigger(text) {
+            if !remainder.isEmpty {
+                transcript.append(TranscriptEntry(speaker: .user, text: remainder))
+                memoryDictationBuffer.append(remainder)
+            }
+            finishRecordingMemory()
+            return
+        }
+        transcript.append(TranscriptEntry(speaker: .user, text: text))
+        memoryDictationBuffer.append(text)
+        dictation.startListening()
+    }
+
+    private func finishRecordingMemory() {
+        let fact = memoryDictationBuffer.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        memoryDictationBuffer = []
+
+        if !fact.isEmpty {
+            memory.remember(fact)
+            justRemembered = fact
+        }
+
+        let confirmation = fact.isEmpty ? "Okay, never mind." : "Got it, I'll remember that."
+        Task { [weak self] in
+            guard let self else { return }
+            self.transcript.append(TranscriptEntry(speaker: .agent, text: confirmation))
+            try? await self.speak([confirmation])
+            self.startListening()
+        }
+    }
+
+    /// Matches "remember this" as a case-insensitive prefix, however it's
+    /// punctuated ("Remember this:", "Remember this,", or nothing at all),
+    /// and returns whatever text follows it in the same utterance.
+    private static func stripRememberTrigger(_ text: String) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trigger = "remember this"
+        guard trimmed.lowercased().hasPrefix(trigger) else { return nil }
+        var remainder = String(trimmed.dropFirst(trigger.count)).trimmingCharacters(in: .whitespaces)
+        if let first = remainder.first, first.isPunctuation {
+            remainder.removeFirst()
+        }
+        return remainder.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Matches "stop" as the last word of an utterance (however it's
+    /// punctuated), and returns everything before it -- so "I like tea,
+    /// stop" and a standalone "Stop." both work.
+    private static func stripStopTrigger(_ text: String) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        var words = trimmed.split(separator: " ")
+        guard let last = words.last else { return nil }
+        let lastWord = String(last).trimmingCharacters(in: .punctuationCharacters).lowercased()
+        guard lastWord == "stop" else { return nil }
+        words.removeLast()
+        return words.joined(separator: " ")
     }
 
     private func handleBargeIn() {
