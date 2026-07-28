@@ -18,11 +18,12 @@ aren't published or licensed for third-party apps to use. There was no way to bu
 voice" — so this app doesn't pretend to. It ships two voices behind one `VoiceProvider` protocol:
 
 - **On-device (default, always available):** `AVSpeechSynthesizer` — free, works offline, clearly
-  synthetic. This is what you get with no ElevenLabs key entered.
-- **ElevenLabs (opt-in):** paste a key in **Settings** (long-press the header, or tap the
-  first-launch note) and the app switches to ElevenLabs' Flash v2.5 model — a warm, conversational
-  preset by default, changeable via the Voice ID field in the same sheet. This is the closest
-  practical stand-in for a natural voice, not a claim of matching any specific product's voice.
+  synthetic. This is what you get with no Breeze key/voice ID entered, or with only one of the two.
+- **Breeze (opt-in):** paste an API key **and** a voice ID in **Settings** (long-press the header,
+  or tap the first-launch note) and the app switches to the [Breeze Blue](https://breezeblue.ai)
+  text-to-speech API. Unlike some providers, Breeze has no "default voice" — its endpoint requires
+  a specific voice ID in the URL, so both fields are needed together. This is the closest practical
+  stand-in for a natural voice, not a claim of matching any specific product's voice.
 
 ### This app is not fully local
 
@@ -43,10 +44,11 @@ You need, in order:
 2. **A documents folder, bridged through iCloud Drive** (see below) — optional in the sense that the
    app runs without it (falling back to an empty local folder), but the whole point of the app is
    moot without it.
-3. **An ElevenLabs API key** (optional) — get one at [elevenlabs.io](https://elevenlabs.io) if you
-   want the more natural voice.
+3. **A Breeze API key and voice ID** (optional) — get both at [breezeblue.ai](https://breezeblue.ai)
+   if you want the more natural voice. The key starts with `brz_`, voice IDs with `voc_` — pick a
+   voice from your Breeze account and copy its ID; there's no "just use the default" option.
 
-All three are entered in the same place: **Settings**, opened by long-pressing the header or
+All of this is entered in the same place: **Settings**, opened by long-pressing the header or
 tapping the note under the controls on first launch.
 
 ### The iCloud Drive folder bridge (Windows ↔ iPhone, no Mac needed)
@@ -180,6 +182,6 @@ Sources/
 - **Every answer**: a call to the Claude API. Question text + retrieved excerpts leave the device.
 - **Web search**: when the model decides your folder doesn't answer the question, the search query
   leaves the device via Anthropic's `web_search` tool.
-- **Voice**: on-device by default (nothing leaves the device for speech output). Entering an
-  ElevenLabs key sends the text being spoken to ElevenLabs for synthesis.
+- **Voice**: on-device by default (nothing leaves the device for speech output). Entering a
+  Breeze key and voice ID sends the text being spoken to Breeze (breezeblue.ai) for synthesis.
 - **API keys**: stored in the iOS Keychain, never in source, never in `UserDefaults`.

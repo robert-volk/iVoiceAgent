@@ -2,7 +2,7 @@ import Foundation
 import AVFoundation
 
 /// On-device voice via AVSpeechSynthesizer. Free, fully offline, always
-/// available — this is the default until an ElevenLabs key is entered, and
+/// available — this is the default until a Breeze key and voice ID are entered, and
 /// the permanent fallback if one never is. Clearly synthetic, but reliable.
 final class SystemVoice: NSObject, VoiceProvider {
     let requiresNetwork = false

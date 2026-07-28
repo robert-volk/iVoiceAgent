@@ -139,7 +139,7 @@ struct AgentView: View {
         if settings.corpusBookmarkData == nil {
             return "Pick your Voice Agent folder (in iCloud Drive) and add your Anthropic key in Settings."
         }
-        return "Using the on-device voice. Add an ElevenLabs key for a natural one."
+        return "Using the on-device voice. Add a Breeze key and voice ID for a natural one."
     }
 
     // MARK: - Controls

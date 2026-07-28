@@ -4,7 +4,7 @@ import SwiftUI
 /// only from the first-launch note or a long-press on the header (see
 /// AgentView). Holds exactly three things: the Anthropic key (required —
 /// every answer is a Claude API call), the one-time iCloud folder pick, and
-/// the optional ElevenLabs key + voice ID that upgrades the spoken voice.
+/// the optional Breeze key + voice ID that upgrades the spoken voice.
 struct SettingsSheet: View {
     /// Called with the picked folder URL. The `.fileImporter` that produces
     /// it lives on *this* view, not the presenter — a `.fileImporter`
@@ -17,10 +17,10 @@ struct SettingsSheet: View {
     @ObservedObject private var settings = AppSettings.shared
 
     @State private var anthropicKey: String = Keychain.load(.anthropicAPIKey) ?? ""
-    @State private var elevenLabsKey: String = Keychain.load(.elevenLabsAPIKey) ?? ""
-    @State private var elevenLabsVoiceID: String = AppSettings.shared.elevenLabsVoiceID
-    @State private var isValidatingElevenLabs = false
-    @State private var elevenLabsValidationMessage: String?
+    @State private var breezeKey: String = Keychain.load(.breezeAPIKey) ?? ""
+    @State private var breezeVoiceID: String = AppSettings.shared.breezeVoiceID
+    @State private var isValidatingBreeze = false
+    @State private var breezeValidationMessage: String?
     @State private var showingFolderPicker = false
 
     var body: some View {
@@ -47,23 +47,23 @@ struct SettingsSheet: View {
                 }
 
                 Section {
-                    SecureField("ElevenLabs key (optional)", text: $elevenLabsKey)
+                    SecureField("brz_... (Breeze API key)", text: $breezeKey)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
-                        .onSubmit { validateElevenLabsKeyIfNeeded() }
-                    TextField("Voice ID", text: $elevenLabsVoiceID)
+                        .onSubmit { validateBreezeKeyIfNeeded() }
+                    TextField("voc_... (Breeze voice ID)", text: $breezeVoiceID)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
 
-                    if isValidatingElevenLabs {
+                    if isValidatingBreeze {
                         ProgressView()
-                    } else if let message = elevenLabsValidationMessage {
+                    } else if let message = breezeValidationMessage {
                         Text(message).font(.footnote).foregroundStyle(.secondary)
                     }
                 } header: {
                     Text("Voice (optional)")
                 } footer: {
-                    Text("Without a key, Voice Agent speaks with the on-device voice — clearly synthetic, but free and works offline. An ElevenLabs key sounds far more natural. This is not the Claude voice-chat voice: Anthropic doesn't expose that voice, or any text-to-speech at all, through its API.")
+                    Text("Without both a key and a voice ID, Voice Agent speaks with the on-device voice — clearly synthetic, but free and works offline. A Breeze key and voice ID together sound far more natural. This is not the Claude voice-chat voice: Anthropic doesn't expose that voice, or any text-to-speech at all, through its API. Find your key and voice ID at breezeblue.ai — the key starts with \"brz_\", voice IDs with \"voc_\".")
                 }
             }
             .navigationTitle("Settings")
@@ -96,17 +96,17 @@ struct SettingsSheet: View {
             : "Pick your Voice Agent folder"
     }
 
-    private func validateElevenLabsKeyIfNeeded() {
-        let trimmed = elevenLabsKey.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func validateBreezeKeyIfNeeded() {
+        let trimmed = breezeKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
-            elevenLabsValidationMessage = nil
+            breezeValidationMessage = nil
             return
         }
-        isValidatingElevenLabs = true
+        isValidatingBreeze = true
         Task {
-            let isValid = await ElevenLabsVoice.validate(apiKey: trimmed)
-            isValidatingElevenLabs = false
-            elevenLabsValidationMessage = isValid ? "Key looks good." : "Couldn't verify this key."
+            let isValid = await BreezeVoice.validate(apiKey: trimmed)
+            isValidatingBreeze = false
+            breezeValidationMessage = isValid ? "Key looks good." : "Couldn't verify this key."
         }
     }
 
@@ -118,14 +118,14 @@ struct SettingsSheet: View {
             Keychain.save(trimmedAnthropic, for: .anthropicAPIKey)
         }
 
-        let trimmedEleven = elevenLabsKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmedEleven.isEmpty {
-            Keychain.delete(.elevenLabsAPIKey)
+        let trimmedBreeze = breezeKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedBreeze.isEmpty {
+            Keychain.delete(.breezeAPIKey)
         } else {
-            Keychain.save(trimmedEleven, for: .elevenLabsAPIKey)
+            Keychain.save(trimmedBreeze, for: .breezeAPIKey)
         }
 
-        let trimmedVoiceID = elevenLabsVoiceID.trimmingCharacters(in: .whitespacesAndNewlines)
-        settings.elevenLabsVoiceID = trimmedVoiceID.isEmpty ? AppSettings.defaultElevenLabsVoiceID : trimmedVoiceID
+        let trimmedVoiceID = breezeVoiceID.trimmingCharacters(in: .whitespacesAndNewlines)
+        settings.breezeVoiceID = trimmedVoiceID.isEmpty ? AppSettings.defaultBreezeVoiceID : trimmedVoiceID
     }
 }

@@ -13,33 +13,35 @@ final class AppSettings: ObservableObject {
     private enum Keys {
         static let hasSeenFirstLaunch = "hasSeenFirstLaunch"
         static let corpusBookmark = "corpusBookmarkData"
-        static let elevenLabsVoiceID = "elevenLabsVoiceID"
+        static let breezeVoiceID = "breezeVoiceID"
     }
 
-    /// "Breeze Blue" — Robert's chosen ElevenLabs voice for the agent. Not a
-    /// claim of matching any particular product's voice — see
-    /// VoiceProvider.swift and the README for why.
-    static let defaultElevenLabsVoiceID = "brz_mDQBUuJ_P2R8xaDKwiVdQ8M0xJhGkasp"
+    /// No baked-in default: Breeze voice IDs (`voc_...`) are per-account, and
+    /// the text-to-speech endpoint requires one in the URL path — there's no
+    /// "just use whatever's default" option the way ElevenLabs has. Empty
+    /// means VoiceProviderFactory falls back to the on-device voice even if
+    /// a Breeze key is present, until a real voice ID is entered.
+    static let defaultBreezeVoiceID = ""
 
     @Published var hasSeenFirstLaunch: Bool {
         didSet { UserDefaults.standard.set(hasSeenFirstLaunch, forKey: Keys.hasSeenFirstLaunch) }
     }
 
-    /// Security-scoped bookmark to the user-picked Drive (or other Files
+    /// Security-scoped bookmark to the user-picked iCloud (or other Files
     /// provider) folder. Nil until the user completes the one-time folder
     /// pick; CorpusStore falls back to a local sandbox folder until then.
     @Published var corpusBookmarkData: Data? {
         didSet { UserDefaults.standard.set(corpusBookmarkData, forKey: Keys.corpusBookmark) }
     }
 
-    @Published var elevenLabsVoiceID: String {
-        didSet { UserDefaults.standard.set(elevenLabsVoiceID, forKey: Keys.elevenLabsVoiceID) }
+    @Published var breezeVoiceID: String {
+        didSet { UserDefaults.standard.set(breezeVoiceID, forKey: Keys.breezeVoiceID) }
     }
 
     private init() {
         let defaults = UserDefaults.standard
         hasSeenFirstLaunch = defaults.bool(forKey: Keys.hasSeenFirstLaunch)
         corpusBookmarkData = defaults.data(forKey: Keys.corpusBookmark)
-        elevenLabsVoiceID = defaults.string(forKey: Keys.elevenLabsVoiceID) ?? Self.defaultElevenLabsVoiceID
+        breezeVoiceID = defaults.string(forKey: Keys.breezeVoiceID) ?? Self.defaultBreezeVoiceID
     }
 }

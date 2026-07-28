@@ -3,12 +3,12 @@ import Security
 
 /// Minimal Keychain helper for the secrets this app holds: the Anthropic API
 /// key (required — every answer is a Claude API call) and the optional
-/// ElevenLabs key (upgrades the spoken voice from the on-device fallback).
+/// Breeze key (upgrades the spoken voice from the on-device fallback).
 /// Never UserDefaults, never in source — see README "What leaves this device".
 enum Keychain {
     enum Item: String {
         case anthropicAPIKey = "anthropic-api-key"
-        case elevenLabsAPIKey = "elevenlabs-api-key"
+        case breezeAPIKey = "breeze-api-key"
     }
 
     private static let service = "com.robertvolk.voiceagent"

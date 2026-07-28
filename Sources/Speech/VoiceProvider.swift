@@ -6,10 +6,10 @@ import Foundation
 /// speech start before the model has finished thinking.
 ///
 /// Two implementations ship: `SystemVoice` (on-device, free, always
-/// available) and `ElevenLabsVoice` (opt-in, needs a key, sounds far more
-/// natural). Neither is "the Claude voice chat voice" — see the README and
-/// the note in SettingsSheet.swift for why that specific voice isn't
-/// reachable from the API.
+/// available) and `BreezeVoice` (opt-in, needs a key and a voice ID, sounds
+/// far more natural). Neither is "the Claude voice chat voice" — see the
+/// README and the note in SettingsSheet.swift for why that specific voice
+/// isn't reachable from the API.
 protocol VoiceProvider {
     var requiresNetwork: Bool { get }
 
@@ -23,15 +23,18 @@ protocol VoiceProvider {
 }
 
 enum VoiceProviderFactory {
-    /// Picks ElevenLabs when a key is present, the on-device voice otherwise.
-    /// This is the one place that decision is made — everything downstream
-    /// just talks to `VoiceProvider`. `@MainActor` because it reads
-    /// `AppSettings.shared`, which is main-actor-isolated; every call site
-    /// (AgentViewModel) is already on the main actor.
+    /// Picks Breeze when both a key AND a voice ID are present (Breeze's
+    /// text-to-speech endpoint requires a voice ID in the URL path -- there
+    /// is no "just use a default voice" option), the on-device voice
+    /// otherwise. This is the one place that decision is made — everything
+    /// downstream just talks to `VoiceProvider`. `@MainActor` because it
+    /// reads `AppSettings.shared`, which is main-actor-isolated; every call
+    /// site (AgentViewModel) is already on the main actor.
     @MainActor
     static func current() -> VoiceProvider {
-        if let key = Keychain.load(.elevenLabsAPIKey), !key.isEmpty {
-            return ElevenLabsVoice(apiKey: key, voiceID: AppSettings.shared.elevenLabsVoiceID)
+        let voiceID = AppSettings.shared.breezeVoiceID
+        if let key = Keychain.load(.breezeAPIKey), !key.isEmpty, !voiceID.isEmpty {
+            return BreezeVoice(apiKey: key, voiceID: voiceID)
         }
         return SystemVoice()
     }
